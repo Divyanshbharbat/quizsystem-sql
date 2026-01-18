@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Poppins:wght@500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+/* Add this to your CSS file */
+.circular-progress {
+    width: 200px; /* Set a manageable size */
+    height: 100px; /* Set a manageable size */
+    margin: 0 auto; /* Center the progress bar */
+}
+
+.circle-bg {
+    transition: stroke 0.3s ease;
+}
+
+.circle {
+    transition: stroke-dashoffset 0.5s ease-in-out; /* Ensure animation is smooth */
+}
+
+.percentage {
+    font-size: 8px; /* Adjusted font size for better readability */
+    fill: #000000; /* Color of the percentage text */
+    font-weight: bold; /* Bold for emphasis */
+}
+.tooltip {
+    position: absolute;
+    bottom: 110%; /* Position above the circle */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: #fff;
+    padding: 5px;
+    border-radius: 4px;
+    visibility: hidden; /* Initially hidden */
+}
+
+.circular-chart:hover .tooltip {
+    visibility: visible; /* Show on hover */
+}
+
+ 
+body{
+    font-family:'Poppins',sens-serif;
+}

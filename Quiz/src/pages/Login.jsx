@@ -1,0 +1,177 @@
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import toast,{Toaster} from 'react-hot-toast'
+const Login = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [session, setSession] = useState(""); // New state
+  const [semester, setSemester] = useState("odd"); // Default to "odd"
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!session.trim()) {
+      toast.error("Please enter session (e.g., 2025-2026)");
+      return;
+    }
+
+    if (!["even", "odd"].includes(semester)) {
+      toast.error("Semester must be either 'even' or 'odd'");
+      return;
+    }
+
+    try {
+ const response = await fetch(
+  `${import.meta.env.VITE_APP}/api/faculty/login`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: username, password, session, semester }),
+    credentials: "include", // ensures cookies are sent
+  }
+);
+
+console.log('divyansh'+`${import.meta.VITE_APP}`)
+
+      const result = await response.json();
+      console.log(result.data);
+
+      if (response.ok && result.success) {
+        const facultyDetails = result.data;
+        localStorage.setItem("facultyDetails", JSON.stringify(facultyDetails));
+       navigate("/create");
+      } else {
+        alert(result.message || "Invalid Username or Password for this session/semester");
+      }
+    } catch (error) {
+      console.error("An error occurred:", error);
+      alert(`An error occurred: ${error.message || "Please try again later."}`);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-white">
+      {/* Top Heading */}
+      <header className="text-center py-6 bg-white shadow-md">
+        <h1 className="text-3xl font-bold text-blue-800">
+          St. Vincent Pallotti College of Engineering & Technology
+        </h1>
+        <p className="text-gray-600 mt-1 text-lg font-medium">
+          Faculty Quiz Login Portal
+        </p>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex flex-1 relative">
+        {/* Left: Login Form */}
+        <div className="flex-1 flex items-center justify-center p-6 md:p-10 relative z-10">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 md:p-10 relative z-10">
+            <h2 className="text-2xl font-bold text-center mb-8 text-blue-700">
+              Faculty Login
+            </h2>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                  htmlFor="username"
+                >
+                  Email
+                </label>
+                <input
+                  type="text"
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                  htmlFor="password"
+                >
+                  Password
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                  htmlFor="session"
+                >
+                  Session
+                </label>
+                <input
+                  type="text"
+                  id="session"
+                  value={session}
+                  onChange={(e) => setSession(e.target.value)}
+                  className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter session (e.g., 2025-26)"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  className="block text-sm font-semibold text-gray-700 mb-1"
+                  htmlFor="semester"
+                >
+                  Semester
+                </label>
+                <select
+                  id="semester"
+                  value={semester}
+                  onChange={(e) => setSemester(e.target.value)}
+                  className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="odd">Odd</option>
+                  <option value="even">Even</option>
+                </select>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-blue-700 text-white font-semibold py-3 rounded-lg shadow-md hover:bg-blue-800 transition duration-300"
+              >
+                Login
+              </button>
+             
+            </form>
+          </div>
+        </div>
+
+        {/* Right: Image */}
+        <div className="flex-1 hidden md:flex items-center justify-center -ml-16">
+          <img
+            src="https://img.freepik.com/free-vector/access-control-system-abstract-concept_335657-3180.jpg?semt=ais_hybrid&w=740&q=80"
+            alt="Login Illustration"
+            className="object-contain h-[28rem] md:h-[34rem] w-[28rem] md:w-[34rem] rounded-xl "
+          />
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer className="text-center text-gray-500 py-4 text-sm bg-white border-t">
+        © 2025 St. Vincent Pallotti College of Engineering & Technology | All Rights Reserved
+      </footer>
+    </div>
+  );
+};
+
+export default Login;
