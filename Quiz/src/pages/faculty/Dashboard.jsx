@@ -102,17 +102,17 @@ const Dashboard = ({ role: propRole }) => {
   const [error, setError] = useState(null);
 
   const fetchQuizzes = async () => {
-    if (!facultyDetails?._id) return;
+    if (!facultyDetails?.id) return;
     setLoading(true); setError(null);
     try {
    const response = await axios.get(
-  `${import.meta.env.VITE_APP}/api/faculty/${facultyDetails._id}/quizzes`
+  `${import.meta.env.VITE_APP}/api/faculty/${facultyDetails.id}/quizzes`
 );
 
 
       const data = response.data.data || [];
       setQuizzes(data);
-      if (data.length > 0) setSelectedQuizId(data[0]._id);
+      if (data.length > 0) setSelectedQuizId(data[0].id);
     } catch (err) { console.error(err); setError("Failed to fetch quizzes"); }
     finally { setLoading(false); }
   };
@@ -126,12 +126,12 @@ const Dashboard = ({ role: propRole }) => {
     if (!selectedSubject) { setSubjectQuizzes([]); setSelectedQuizId(""); return; }
     const filtered = quizzes.filter(q => q.subject === selectedSubject);
     setSubjectQuizzes(filtered);
-    if (filtered.length > 0 && !filtered.find(q => q._id === selectedQuizId)) setSelectedQuizId(filtered[0]._id);
+    if (filtered.length > 0 && !filtered.find(q => q.id === selectedQuizId)) setSelectedQuizId(filtered[0].id);
   }, [selectedSubject, quizzes]);
 
   useEffect(() => {
     if (!selectedQuizId) { setSelectedQuiz(null); return; }
-    const q = quizzes.find(q => q._id === selectedQuizId);
+    const q = quizzes.find(q => q.id === selectedQuizId);
     setSelectedQuiz(q || null);
   }, [selectedQuizId, quizzes]);
 
@@ -181,7 +181,7 @@ const Dashboard = ({ role: propRole }) => {
               </label>
               <label className="font-medium">Select Quiz:{" "}
                 <select value={selectedQuizId} onChange={(e)=>setSelectedQuizId(e.target.value)} className="ml-2 border border-[#243278]  rounded-md px-3 py-2 bg-white text-black shadow-sm ">
-                  {subjectQuizzes.map((quiz)=><option key={quiz._id} value={quiz._id}>{quiz.title}</option>)}
+                  {subjectQuizzes.map((quiz)=><option key={quiz.id} value={quiz.id}>{quiz.title}</option>)}
                 </select>
               </label>
             </div>

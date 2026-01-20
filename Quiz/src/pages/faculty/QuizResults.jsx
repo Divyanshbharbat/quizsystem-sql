@@ -85,7 +85,7 @@ const QuizResults = () => {
           setSubmissions(subs);
 
           if (subs.length > 0) {
-            const uniqueQs = subs[0].answers.map((ans) => ({ _id: ans.questionId }));
+            const uniqueQs = subs[0].answers.map((ans) => ({ id: ans.questionId }));
             setQuestions(uniqueQs);
           }
         }
@@ -114,12 +114,12 @@ const QuizResults = () => {
       };
 
       questions.forEach((q, idx) => {
-        const answer = sub.answers.find((a) => a.questionId === q._id);
+        const answer = sub.answers.find((a) => a.questionId === q.id);
         row[`Q.${idx + 1}`] = answer ? answer.score || 0 : 0;
       });
 
       row["Total Score"] = questions.reduce((sum, q) => {
-        const answer = sub.answers.find((a) => a.questionId === q._id);
+        const answer = sub.answers.find((a) => a.questionId === q.id);
         return sum + (answer?.score || 0);
       }, 0);
 
@@ -172,7 +172,7 @@ const QuizResults = () => {
 
               return (
                 <tr
-                  key={sub._id}
+                  key={sub.id}
                   className={`${sIdx % 2 === 0 ? "bg-white" : "bg-gray-50"} hover:bg-blue-50 transition`}
                 >
                   <td className="px-4 py-2 border border-gray-300">{sub.studentId?.name || "-"}</td>
@@ -183,9 +183,9 @@ const QuizResults = () => {
                     {new Date(sub.submittedAt).toLocaleString()}
                   </td>
                   {questions.map((q) => {
-                    const answer = sub.answers.find((a) => a.questionId === q._id);
+                    const answer = sub.answers.find((a) => a.questionId === q.id);
                     return (
-                      <td key={q._id} className="px-3 py-2 border border-gray-300 text-center font-medium">
+                      <td key={q.id} className="px-3 py-2 border border-gray-300 text-center font-medium">
                         {answer?.score ?? 0}
                       </td>
                     );

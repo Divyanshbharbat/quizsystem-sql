@@ -1,35 +1,79 @@
-// models/User.js
-import { Schema, model } from 'mongoose';
-import bcrypt from 'bcryptjs';
+// models/Student.js
+import { DataTypes, Model } from "sequelize";
+import sequelize from "../config/db.js"; // your Sequelize instance
+import bcrypt from "bcryptjs";
 
-const StudentSchema = new Schema({
-  name: { type: String, required: true },
-  studentId: { type: String, required: true, unique: true },
-  department: { type: String, required: true },
-  year: { type: Number, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  phone: { type: String, required: true },
+class Student extends Model {
+  // Method to compare password
+  async matchPassword(enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
+  }
+}
 
-  // ✅ Add OTP fields
-  resetPasswordToken: { type: String },
-  resetPasswordExpires: { type: Date },
-}, {
-  timestamps: true,
-});
+Student.init(
+  {
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    studentId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    department: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    year: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    phone: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
 
-// Hash the password before saving the user
-StudentSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
-});
+    // ✅ OTP / Reset Password
+    resetPasswordToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    resetPasswordExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+  },
+  {
+    sequelize,
+    modelName: "Student",
+    tableName: "students",
+    timestamps: true,
 
-// Compare password for login
-StudentSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
+    hooks: {
+      beforeCreate: async (student) => {
+        if (student.password) {
+          const salt = await bcrypt.genSalt(10);
+          student.password = await bcrypt.hash(student.password, salt);
+        }
+      },
+      beforeUpdate: async (student) => {
+        if (student.changed("password")) {
+          const salt = await bcrypt.genSalt(10);
+          student.password = await bcrypt.hash(student.password, salt);
+        }
+      },
+    },
+  }
+);
 
-const Student = model('Student', StudentSchema);
 export default Student;

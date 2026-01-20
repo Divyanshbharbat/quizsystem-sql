@@ -22,15 +22,15 @@ const HomePageStudent = () => {
   }, [navigate]);
 
   useEffect(() => {
-    if (!student?._id) return;
+    if (!student?.id) return;
 
     const fetchQuizzes = async () => {
       try {
         setLoading(true);
         const res = await axios.get(
-          `${import.meta.env.VITE_APP}/api/student/${student._id}/quizzes`
+          `${import.meta.env.VITE_APP}/api/student/${student.id}/quizzes`
         );
-
+        console.log("Fetched quizzes:", res.data);
         if (res.data?.success && Array.isArray(res.data.data)) {
           setQuizzes(res.data.data);
         } else {

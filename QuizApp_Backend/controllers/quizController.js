@@ -1,6 +1,6 @@
 import Quiz from "../models/Quiz.js";
 import QuizProgress from "../models/QuizProgress.js";
-import QuizSubmission from "../models/QuizSubmission.js";
+
 import Student from "../models/Student.js";
 import Papa from "papaparse";
 import cloudinary from "../config/cloudinary.js";
@@ -427,62 +427,113 @@ export const blockStudent = async (req, res) => {
   const { quizId } = req.params;
   const studentId = req.user?.id;
 
-  if (!quizId || !studentId) return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
+  if (!quizId || !studentId) {
+    return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
+  }
 
   try {
     const quizConfig = await QuizConfig.findByPk(quizId);
-    if (!quizConfig) return res.status(404).json({ success: false, message: "Quiz not found" });
-
-    const now = new Date();
-    quizConfig.blocked = quizConfig.blocked || [];
-
-    // Remove expired
-    quizConfig.blocked = quizConfig.blocked.filter((b) => b.expiresAt > now);
-
-    const existing = quizConfig.blocked.find((b) => b.studentId === studentId);
-    if (existing) {
-      const remainingSeconds = Math.ceil((existing.expiresAt - now) / 1000);
-      return res.json({ success: true, alreadyBlocked: true, remainingSeconds, message: "Student is already blocked" });
+    if (!quizConfig) {
+      return res.status(404).json({ success: false, message: "Quiz not found" });
     }
 
-    const BLOCK_DURATION = 30; // seconds
-    quizConfig.blocked.push({ studentId, expiresAt: new Date(now.getTime() + BLOCK_DURATION * 1000) });
-    await quizConfig.save();
+    const now = new Date();
 
-    res.json({ success: true, blocked: true, remainingSeconds: BLOCK_DURATION, message: "Student blocked for 30 seconds" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+    let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
+
+    // ✅ Remove expired
+    blocked = blocked.filter(b => new Date(b.expiresAt) > now);
+
+    const existing = blocked.find(
+      b => String(b.studentId) === String(studentId)
+    );
+
+    if (existing) {
+      const remainingSeconds = Math.ceil(
+        (new Date(existing.expiresAt) - now) / 1000
+      );
+
+      return res.json({
+        success: true,
+        alreadyBlocked: true,
+        remainingSeconds,
+        expiresAt: new Date(existing.expiresAt).getTime()
+      });
+    }
+
+    const BLOCK_DURATION = 30;
+    const expiresAt = new Date(now.getTime() + BLOCK_DURATION * 1000);
+
+    blocked.push({
+      studentId,
+      expiresAt: expiresAt.toISOString() // ✅ JSON safe
+    });
+
+    await quizConfig.update({ blocked });
+
+    res.json({
+      success: true,
+      blocked: true,
+      remainingSeconds: BLOCK_DURATION,
+      expiresAt: expiresAt.getTime()
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
+
+
 
 // ---------------- Get block status ----------------
 export const getBlockStatus = async (req, res) => {
   const { quizId } = req.params;
   const studentId = req.user?.id;
 
-  if (!quizId || !studentId) return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
+  if (!quizId || !studentId) {
+    return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
+  }
 
   try {
     const quizConfig = await QuizConfig.findByPk(quizId);
-    if (!quizConfig) return res.status(404).json({ success: false, message: "Quiz not found" });
+    if (!quizConfig) {
+      return res.status(404).json({ success: false, message: "Quiz not found" });
+    }
 
     const now = new Date();
-    quizConfig.blocked = quizConfig.blocked || [];
-    quizConfig.blocked = quizConfig.blocked.filter((b) => b.expiresAt > now);
 
-    const existing = quizConfig.blocked.find((b) => b.studentId === studentId);
+    let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
+
+    blocked = blocked.filter(b => new Date(b.expiresAt) > now);
+
+    // ✅ persist cleanup
+    await quizConfig.update({ blocked });
+
+    const existing = blocked.find(
+      b => String(b.studentId) === String(studentId)
+    );
+
     if (existing) {
-      const remainingSeconds = Math.ceil((existing.expiresAt - now) / 1000);
-      return res.json({ success: true, blocked: true, remainingSeconds });
+      return res.json({
+        success: true,
+        blocked: true,
+        remainingSeconds: Math.ceil(
+          (new Date(existing.expiresAt) - now) / 1000
+        ),
+        expiresAt: new Date(existing.expiresAt).getTime()
+      });
     }
 
     res.json({ success: true, blocked: false, remainingSeconds: 0 });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
 
 
 
@@ -493,143 +544,382 @@ import { Op } from "sequelize";
 import Faculty from "../models/Faculty.js";
 
 // ---------------- GET QUIZ ----------------
+// export const getQuiz = async (req, res) => {
+//   const { quizId } = req.params;
+//  const studentId = req.student?.studentId; // matches middleware
+
+// console.log("Fetching quiz:", { quizId, studentId });
+//   if (!studentId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+//   try {
+//     const quizConfig = await QuizConfig.findByPk(quizId, {
+//       include: { model: Faculty, attributes: ["id", "name"] },
+//     });
+
+//     if (!quizConfig) return res.status(404).json({ success: false, message: "QuizConfig not found" });
+
+//     const now = new Date();
+
+//     // Ensure blocked array exists
+//     quizConfig.blocked = quizConfig.blocked || [];
+
+//     // Remove expired blocks
+//     quizConfig.blocked = quizConfig.blocked.filter(block => block.expiresAt && new Date(block.expiresAt) > now);
+
+//     const existingBlock = quizConfig.blocked.find(block => block.student === studentId);
+//     let blocked = false;
+//     let remainingSeconds = 0;
+
+//     if (existingBlock) {
+//       blocked = true;
+//       remainingSeconds = Math.ceil((new Date(existingBlock.expiresAt) - now) / 1000);
+//     }
+
+//     // Find or create progress
+//     let progress = await QuizProgress.findOne({ where: { studentId, quizConfigId: quizId } });
+//     if (!progress) {
+//       progress = await QuizProgress.create({
+//         studentId,
+//         quizConfigId: quizId,
+//         currentQuestionIndex: 0,
+//         answers: JSON.stringify([]),
+//         completed: false,
+//         status: false,
+//         timeLeft: quizConfig.timeLimit * 60,
+//       });
+//     }
+
+//     // Fetch questions (adapted for Sequelize JSON field)
+//     const selectionsWithQuestions = await Promise.all(
+//       quizConfig.selections.map(async (selection) => {
+//         const allQuizzes = await Quiz.findAll({
+//           where: {
+//             category: quizConfig.category,
+//             subcategory: selection.subcategory,
+//           },
+//         });
+
+//         let questions = [];
+//         allQuizzes.forEach((quiz) => {
+//           if (Array.isArray(quiz.questions)) questions.push(...quiz.questions);
+//         });
+
+//         const uniqueQuestions = Array.from(
+//           new Map(
+//             questions
+//               .filter(q => q && q.id && q.question && Array.isArray(q.options))
+//               .map(q => [q.id.toString(), q])
+//           ).values()
+//         );
+
+//         const shuffled = seededShuffle(uniqueQuestions, studentId);
+//         const selectedQuestions = shuffled.slice(0, selection.questionCount);
+
+//         const answers = JSON.parse(progress.answers || "[]");
+
+//         const questionsForStudent = selectedQuestions.map((q) => {
+//           const savedOption = answers.find(a => a.questionId === q.id)?.selectedOption ?? null;
+//           return {
+//             id: q.id,
+//             question: q.question,
+//             options: q.options,
+//             selectedOption: savedOption,
+//           };
+//         });
+
+//         return {
+//           subcategory: selection.subcategory,
+//           questions: questionsForStudent,
+//         };
+//       })
+//     );
+
+//     return res.json({
+//       success: true,
+//       message: "Quiz fetched successfully",
+//       blocked,
+//       remainingSeconds,
+//       data: {
+//         quizConfig,
+//         progress: {
+//           currentQuestionIndex: progress.currentQuestionIndex,
+//           timeLeft: progress.timeLeft,
+//           answers: JSON.parse(progress.answers || "[]"),
+//         },
+//         serverTime: Date.now(),
+//       },
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
+// Helper: shuffle questions consistently per student
+
+
+
+
+/**
+ * Seeded shuffle function: always returns the same shuffled order for a given seed
+ */
+
+
+// ================= GET QUIZ =================
 export const getQuiz = async (req, res) => {
   const { quizId } = req.params;
   const studentId = req.user?.id;
 
-  if (!studentId) return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!studentId) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
+
+  console.log(`[DEBUG] getQuiz called for student: ${studentId}, quiz: ${quizId}`);
 
   try {
+    // Fetch quiz config with faculty
     const quizConfig = await QuizConfig.findByPk(quizId, {
-      include: { model: Faculty, attributes: ["id", "name"] },
+      include: {
+        model: Faculty,
+        as: "faculty",
+        attributes: ["id", "name", "email", "department"],
+      },
     });
 
-    if (!quizConfig) return res.status(404).json({ success: false, message: "QuizConfig not found" });
-
-    const now = new Date();
+    if (!quizConfig) {
+      return res.status(404).json({ success: false, message: "QuizConfig not found" });
+    }
 
     // Ensure blocked array exists
     quizConfig.blocked = quizConfig.blocked || [];
 
     // Remove expired blocks
-    quizConfig.blocked = quizConfig.blocked.filter(block => block.expiresAt && new Date(block.expiresAt) > now);
+    const now = new Date();
+    quizConfig.blocked = quizConfig.blocked.filter(
+      (block) => block.expiresAt && new Date(block.expiresAt) > now
+    );
 
-    const existingBlock = quizConfig.blocked.find(block => block.student === studentId);
-    let blocked = false;
-    let remainingSeconds = 0;
+    await quizConfig.update({ blocked: quizConfig.blocked });
 
+    // Check if student is blocked
+    const existingBlock = quizConfig.blocked.find((b) => b.studentId === studentId);
     if (existingBlock) {
-      blocked = true;
-      remainingSeconds = Math.ceil((new Date(existingBlock.expiresAt) - now) / 1000);
-    }
+      const remainingSeconds = Math.ceil(
+        (new Date(existingBlock.expiresAt) - now) / 1000
+      );
 
-    // Find or create progress
-    let progress = await QuizProgress.findOne({ where: { studentId, quizConfigId: quizId } });
-    if (!progress) {
-      progress = await QuizProgress.create({
-        studentId,
-        quizConfigId: quizId,
-        currentQuestionIndex: 0,
-        answers: JSON.stringify([]),
-        completed: false,
-        status: false,
-        timeLeft: quizConfig.timeLimit * 60,
+      console.log(`[DEBUG] Student ${studentId} is blocked for ${remainingSeconds} more seconds`);
+
+      return res.json({
+        success: true,
+        message: "Quiz fetched successfully",
+        blocked: true,
+        remainingSeconds,
+        data: {
+          quizConfig: {
+            id: quizConfig.id,
+            title: quizConfig.title,
+            category: quizConfig.category,
+            timeLimit: quizConfig.timeLimit,
+            selections: quizConfig.selections,
+            createdBy: quizConfig.faculty,
+          },
+          selectionsWithQuestions: [],
+          progress: {
+            currentQuestionIndex: 0,
+            timeLeft: 0,
+            completed: false,
+            answers: [],
+          },
+          serverTime: Date.now(),
+        },
       });
     }
 
-    // Fetch questions (adapted for Sequelize JSON field)
-    const selectionsWithQuestions = await Promise.all(
-      quizConfig.selections.map(async (selection) => {
-        const allQuizzes = await Quiz.findAll({
-          where: {
-            category: quizConfig.category,
-            subcategory: selection.subcategory,
-          },
+    // Find or create progress
+    let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
+    if (!progress) {
+      progress = await QuizProgress.create({
+        studentId,
+        quizId,
+        currentQuestionIndex: 0,
+        completed: false,
+        status: false,
+        timeLeft: quizConfig.timeLimit * 60,
+        answers: [],
+      });
+      console.log(`[DEBUG] Created new progress for student ${studentId}`);
+    } else {
+      console.log(`[DEBUG] Existing progress found:`, progress.answers);
+    }
+
+    const savedAnswers = progress.answers || [];
+    const selectionsWithQuestions = [];
+
+    console.log(`[DEBUG] QuizConfig selections:`, JSON.stringify(quizConfig.selections));
+    console.log(`[DEBUG] QuizConfig category:`, quizConfig.category);
+
+    const allQuizzes = await Quiz.findAll();
+    console.log(`[DEBUG] Total quizzes in database:`, allQuizzes.length);
+
+    allQuizzes.forEach((quiz, idx) => {
+      console.log(`[DEBUG] Quiz ${idx}:`, {
+        id: quiz.id,
+        categoriesCount: quiz.categories?.length || 0,
+        categories: quiz.categories?.map(c => ({
+          category: c.category,
+          subcategory: c.subcategory,
+          questionCount: c.questions?.length || 0
+        }))
+      });
+    });
+
+    for (const selection of quizConfig.selections) {
+      let questions = [];
+
+      console.log(`[DEBUG] ========================================`);
+      console.log(`[DEBUG] Processing selection: ${selection.subcategory}, need ${selection.questionCount} questions`);
+
+      allQuizzes.forEach((quiz, quizIdx) => {
+        let categories = [];
+        try {
+          categories = Array.isArray(quiz.categories) ? quiz.categories : JSON.parse(quiz.categories);
+        } catch (err) {
+          console.error(`[ERROR] Invalid categories JSON for quiz ${quiz.id}:`, err.message);
+          return;
+        }
+
+        console.log(`[DEBUG]   Quiz ${quizIdx} has ${categories.length} categories`);
+
+        categories.forEach((cat, catIdx) => {
+          console.log(`[DEBUG]     Category ${catIdx}: "${cat.category}" / "${cat.subcategory}"`);
+          console.log(`[DEBUG]       Comparing "${cat.subcategory}" === "${selection.subcategory}" ? ${cat.subcategory === selection.subcategory}`);
+          console.log(`[DEBUG]       Questions array is array? ${Array.isArray(cat.questions)}`);
+          console.log(`[DEBUG]       Questions length: ${cat.questions?.length || 0}`);
+
+          if (cat.subcategory === selection.subcategory && Array.isArray(cat.questions)) {
+            console.log(`[DEBUG]   ✅ MATCH! Adding ${cat.questions.length} questions`);
+            questions.push(...cat.questions);
+          }
         });
+      });
 
-        let questions = [];
-        allQuizzes.forEach((quiz) => {
-          if (Array.isArray(quiz.questions)) questions.push(...quiz.questions);
-        });
+      console.log(`[DEBUG] Total questions found for "${selection.subcategory}": ${questions.length}`);
 
-        const uniqueQuestions = Array.from(
-          new Map(
-            questions
-              .filter(q => q && q.id && q.question && Array.isArray(q.options))
-              .map(q => [q.id.toString(), q])
-          ).values()
-        );
+      // Remove duplicate questions by text
+      const uniqueQuestions = Array.from(
+        new Map(
+          questions
+            .filter((q) => {
+              const isValid = q && q.question && Array.isArray(q.options);
+              if (!isValid) console.log(`[DEBUG]   Filtered out question:`, q);
+              return isValid;
+            })
+            .map((q) => [q.question, q])
+        ).values()
+      );
 
-        const shuffled = seededShuffle(uniqueQuestions, studentId);
-        const selectedQuestions = shuffled.slice(0, selection.questionCount);
+      console.log(`[DEBUG] Unique questions after dedup: ${uniqueQuestions.length}`);
 
-        const answers = JSON.parse(progress.answers || "[]");
+      // Shuffle
+      const shuffled = seededShuffle(uniqueQuestions, studentId);
 
-        const questionsForStudent = selectedQuestions.map((q) => {
-          const savedOption = answers.find(a => a.questionId === q.id)?.selectedOption ?? null;
-          return {
-            id: q.id,
-            question: q.question,
-            options: q.options,
-            selectedOption: savedOption,
-          };
-        });
+      const selectedQuestions = shuffled.slice(0, selection.questionCount);
 
+      console.log(`[DEBUG] Selected ${selectedQuestions.length} questions for student`);
+
+      // Map saved answers - use a consistent question ID based on question text
+      const questionsForStudent = selectedQuestions.map((q, index) => {
+        // Create a consistent ID based on question text hash
+        const questionId = `${selection.subcategory}_${index}`;
+        const savedAnswer = savedAnswers.find((a) => a.questionId === questionId);
+        
         return {
-          subcategory: selection.subcategory,
-          questions: questionsForStudent,
+          id: questionId,
+          question: q.question,
+          options: q.options,
+          answer: q.answer,
+          selectedOption: savedAnswer?.selectedOption ?? null,
         };
-      })
-    );
+      });
+
+      console.log(`[DEBUG] Final questions for student in "${selection.subcategory}": ${questionsForStudent.length}`);
+
+      selectionsWithQuestions.push({
+        subcategory: selection.subcategory,
+        questions: questionsForStudent,
+      });
+    }
+
+    console.log(`[DEBUG] ========================================`);
+    console.log(`[DEBUG] Total selections with questions: ${selectionsWithQuestions.length}`);
 
     return res.json({
       success: true,
       message: "Quiz fetched successfully",
-      blocked,
-      remainingSeconds,
+      blocked: false,
+      remainingSeconds: 0,
       data: {
-        quizConfig,
+        quizConfig: {
+          id: quizConfig.id,
+          title: quizConfig.title,
+          category: quizConfig.category,
+          timeLimit: quizConfig.timeLimit,
+          selections: quizConfig.selections,
+          createdBy: quizConfig.faculty,
+        },
+        selectionsWithQuestions,
         progress: {
           currentQuestionIndex: progress.currentQuestionIndex,
           timeLeft: progress.timeLeft,
-          answers: JSON.parse(progress.answers || "[]"),
+          completed: progress.completed,
+          answers: savedAnswers,
         },
         serverTime: Date.now(),
       },
     });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: error.message });
+  } catch (err) {
+    console.error("[ERROR] getQuiz error:", err);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ---------------- SAVE PROGRESS ----------------
+// ================= SAVE PROGRESS =================
 export const saveProgress = async (req, res) => {
-  const studentId = req.user?.id;
-  const { quizId } = req.params;
+  const studentId = parseInt(req.user?.id, 10); // ✅ convert to integer
+  const quizId = parseInt(req.params.quizId, 10);  // ✅ convert to integer
   const { currentQuestionIndex, answers, timeLeft } = req.body;
 
-  if (!studentId) return res.status(401).json({ success: false, message: "Unauthorized" });
+  if (!studentId) {
+    return res.status(401).json({ success: false, message: "Unauthorized" });
+  }
 
   try {
-    let progress = await QuizProgress.findOne({ where: { studentId, quizConfigId: quizId } });
+    let progress = await QuizProgress.findOne({
+      where: { studentId, quizId }
+    });
 
     const formattedAnswers = Array.isArray(answers)
-      ? answers.map(ans => ({ questionId: ans.questionId, selectedOption: ans.selectedOption ?? null }))
+      ? answers.map(ans => ({
+          questionId: ans.questionId, // Use the full questionId sent by frontend (subcategory_index)
+          selectedOption: ans.selectedOption ?? null
+        }))
       : [];
 
     if (!progress) {
       progress = await QuizProgress.create({
         studentId,
-        quizConfigId: quizId,
-        currentQuestionIndex: currentQuestionIndex || 0,
-        answers: JSON.stringify(formattedAnswers),
-        timeLeft: Math.max(0, timeLeft),
-        startTime: new Date(),
+        quizId,
+        currentQuestionIndex: typeof currentQuestionIndex === "number" ? currentQuestionIndex : 0,
+        answers: formattedAnswers,
+        timeLeft: Math.max(0, timeLeft)
       });
     } else {
-      if (typeof currentQuestionIndex === "number") progress.currentQuestionIndex = currentQuestionIndex;
-      progress.answers = JSON.stringify(formattedAnswers);
+      if (typeof currentQuestionIndex === "number") {
+        progress.currentQuestionIndex = currentQuestionIndex;
+      }
+      progress.answers = formattedAnswers;
       progress.timeLeft = Math.max(0, timeLeft);
       await progress.save();
     }
@@ -639,14 +929,21 @@ export const saveProgress = async (req, res) => {
       message: "Progress saved successfully",
       data: {
         currentQuestionIndex: progress.currentQuestionIndex,
-        timeLeft: progress.timeLeft,
-      },
+        timeLeft: progress.timeLeft
+      }
     });
+
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: "Server error", error: err.message });
+    console.error("Save progress error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message
+    });
   }
 };
+
+
 
 // ---------------- GET QUIZ SUBMISSIONS ----------------
 export const getQuizSubmissions = async (req, res) => {

@@ -23,7 +23,7 @@ const StudentLogin = () => {
         { uid, password, quizId },
         { withCredentials: true }
       );
-
+console.log(response.data);
       if (response.data.success) {
         localStorage.setItem(
           "studentDetails",

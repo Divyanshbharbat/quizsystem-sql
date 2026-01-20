@@ -57,7 +57,7 @@ console.log(facultyDetails)
     setSelectedStudent(student);
     try {
      const res = await axios.get(
-  `${import.meta.env.VITE_APP}/api/student/submissions/${student._id}`
+  `${import.meta.env.VITE_APP}/api/student/submissions/${student.id}`
 );
 
       if (res.data.success) {
@@ -205,7 +205,7 @@ console.log(facultyDetails)
                       {filteredStudents.length > 0 ? (
                         filteredStudents.map((student, index) => (
                           <tr
-                            key={student._id}
+                            key={student.id}
                             onClick={() => handleStudentClick(student)}
                             className="cursor-pointer hover:bg-gray-100 transition"
                           >
@@ -284,7 +284,7 @@ console.log(facultyDetails)
                   <div className="grid md:grid-cols-2 gap-4 mt-3">
                     {submissions.map((sub) => (
                       <div
-                        key={sub._id}
+                        key={sub.id}
                         className="p-4 border shadow-sm bg-gray-50 rounded-md hover:shadow-md transition"
                       >
                         <h5 className="font-semibold text-[#02be3a]">
@@ -301,7 +301,7 @@ console.log(facultyDetails)
                             navigate("/result", {
                               state: {
                                 student: selectedStudent,
-                                submissionId: sub._id,
+                                submissionId: sub.id,
                                 quizTitle:
                                   sub.quizId?.title || "Untitled Quiz",
                               },

@@ -124,7 +124,7 @@ const handleAddStudent = async () => {
     if (!editingStudent) return alert("Fetch a student first");
     try {
   const res = await axios.put(
-  `${import.meta.env.VITE_APP}/api/student/${editingStudent._id}`,
+  `${import.meta.env.VITE_APP}/api/student/${editingStudent.id}`,
   {
     studentId: editStudentId,
     name: editName,
@@ -140,7 +140,7 @@ const handleAddStudent = async () => {
          toast.success("✅ Student updated successfully!");
         setStudents(
           (students || []).map((stu) =>
-            stu._id === editingStudent._id ? res.data.data : stu
+            stu.id === editingStudent.id ? res.data.data : stu
           )
         );
         clearEditForm();
@@ -164,7 +164,7 @@ const handleAddStudent = async () => {
       if (res.data.success) {
          toast.success("✅ Student deleted!");
         setStudents(
-          (students || []).filter((stu) => stu._id !== editingStudent._id)
+          (students || []).filter((stu) => stu.id !== editingStudent.id)
         );
         clearEditForm();
       }
@@ -206,7 +206,7 @@ const handleAddStudent = async () => {
     setSelectedStudent(student);
     try {
   const res = await axios.get(
-  `${import.meta.env.VITE_APP}/api/student/submissions/${student._id}`
+  `${import.meta.env.VITE_APP}/api/student/submissions/${student.id}`
 );
 
 
@@ -315,7 +315,7 @@ useEffect(() => {
                     {students.length > 0 ? (
                       students.map((stu, index) => (
                         <tr
-                          key={stu._id}
+                          key={stu.id}
                           onClick={() => handleStudentClick(stu)}
                           className="hover:bg-gray-100 cursor-pointer"
                         >
@@ -389,7 +389,7 @@ useEffect(() => {
                   <div className="grid md:grid-cols-2 gap-4 mt-3">
                     {submissions.map((sub) => (
                       <div
-                        key={sub._id}
+                        key={sub.id}
                         className="p-4 border shadow-sm bg-gray-50 rounded-md hover:shadow-md transition"
                       >
                         <h5 className="font-semibold text-[#02be3a]">
@@ -402,10 +402,10 @@ useEffect(() => {
                         </p>
                      <button
   onClick={() =>
-    navigate(`/${sub.quizId?._id }/result`, {
+    navigate(`/${sub.quizId?.id }/result`, {
       state: {
         student: selectedStudent,
-        submissionId: sub._id,
+        submissionId: sub.id,
         quizTitle: sub.quizId?.title || "Untitled Quiz",
       },
     })

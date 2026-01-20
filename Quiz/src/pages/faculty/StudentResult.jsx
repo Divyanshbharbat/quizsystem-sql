@@ -20,9 +20,9 @@ const StudentResult = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-       console.log("Fetching quizzes for Student ID:", student._id);
+       console.log("Fetching quizzes for Student ID:", student.id);
 const response = await axios.get(
-  `${import.meta.env.VITE_APP}/api/student/${student._id}/quizzes`
+  `${import.meta.env.VITE_APP}/api/student/${student.id}/quizzes`
 );
 
 
@@ -72,7 +72,7 @@ const response = await axios.get(
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {quizzes.map((quiz, index) => (
               <motion.div
-                key={quiz._id}
+                key={quiz.id}
                 className="p-6 bg-gray-50 rounded-lg shadow-md flex flex-col justify-between"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -88,7 +88,7 @@ const response = await axios.get(
                <button
   onClick={() =>
     navigate("/student-quiz-result", {
-      state: { student, quizId: quiz._id, attemptId: quiz._id } // pass attemptId properly from backend
+      state: { student, quizId: quiz.id, attemptId: quiz.id } // pass attemptId properly from backend
     })
   }
   className="py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 transition ease-in-out"

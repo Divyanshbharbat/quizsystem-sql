@@ -168,16 +168,28 @@ const Quiz = () => {
   const navigate = useNavigate();
   const timerRef = useRef(null);
   const timeLeftRef = useRef(null);
+  const stateRef = useRef({ quizFrozen: false, submitting: false, quizCompleted: false });
   
+
+  /* ---------------------
+     Keep state ref updated with current values
+  --------------------- */
+  useEffect(() => {
+    stateRef.current = { quizFrozen, submitting, quizCompleted };
+  }, [quizFrozen, submitting, quizCompleted]);
 
   /* ---------------------
      Fullscreen helpers (local)
   --------------------- */
-  const enterFullscreen = async () => {
+  const enterFullscreen = () => {
+    // Don't use async - browser security requires sync call from user event
     try {
       const el = document.documentElement;
-      if (el.requestFullscreen) await el.requestFullscreen();
-      else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(e => console.warn("Fullscreen request denied:", e));
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      }
     } catch (e) {
       console.warn("Fullscreen request denied:", e);
     }
@@ -303,6 +315,7 @@ useEffect(() => {
         `${import.meta.env.VITE_APP}/api/quizzes/${quizId}`,
         { withCredentials: true }
       );
+      console.log(data)
       if (!data.success) {
         navigate("/");
         return;
@@ -310,6 +323,7 @@ useEffect(() => {
 
       const quiz = data.data.quizConfig;
       const progress = data.data.progress;
+      const selectionsWithQuestions = data.data.selectionsWithQuestions; // ✅ Get questions from backend
       console.log(progress)
    // server timestamp in ms
       const isBlocked = data.blocked || false;
@@ -327,12 +341,65 @@ setTimeLeft(
       // ----------------------------
       // Block handling
       // ----------------------------
-      if (isBlocked && remainingSeconds > 0) {
+      // If blocked but remainingSeconds is 0/missing, use default 30 seconds (for refresh case)
+      const blockDuration = (isBlocked && remainingSeconds > 0) ? remainingSeconds : (isBlocked ? 30 : 0);
+      
+      if (isBlocked && blockDuration > 0) {
         setQuizFrozen(true);
-        setBlockCountdown(remainingSeconds);
+        setBlockCountdown(blockDuration);
         toast.error(data.message || "You are blocked from this quiz.");
-        // Attempt to enter fullscreen automatically
-        enterFullscreen();
+        // Attempt to enter fullscreen (sync call)
+        setTimeout(() => enterFullscreen(), 100);
+        
+        // ✅ PROPER COUNTDOWN LOGIC - Calculate from expiresAt timestamp
+        let timeRemaining = remainingSeconds;
+        console.log(`[BLOCK] Starting countdown from ${remainingSeconds} seconds, expiresAt=${blockDuration ? new Date(data.data.remainingSeconds ? 0 : blockDuration).getTime() : 'N/A'}`);
+        
+        // Update countdown every 1 second for smooth display
+        const countdownInterval = setInterval(() => {
+          // ✅ FIXED: Calculate remaining time from expiresAt, not just decrement
+          if (window._blockExpiresAt) {
+            const now = Date.now();
+            timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+            timeRemaining = Math.max(0, timeRemaining); // Don't go below 0
+          } else {
+            timeRemaining--;
+          }
+
+          const { quizFrozen: frozen, submitting: sub, quizCompleted: completed } = stateRef.current;
+          console.log(`[BLOCK] Countdown: ${timeRemaining}s remaining, frozen=${frozen}, submitting=${sub}, completed=${completed}`);
+          setBlockCountdown(timeRemaining);
+          
+          // When countdown reaches 0, check if should auto-submit
+          if (timeRemaining <= 0) {
+            console.log("[BLOCK] Countdown reached 0, clearing intervals");
+            clearInterval(countdownInterval);
+            if (window._blockPollInterval) clearInterval(window._blockPollInterval);
+            
+            // Get CURRENT state from ref
+            const { quizFrozen: currentFrozen, submitting: currentSub, quizCompleted: currentCompleted } = stateRef.current;
+            
+            // Check if NOT in fullscreen OR tab is hidden
+            const isHidden = document.hidden;
+            const isFullscreen = !!document.fullscreenElement;
+            console.log(`[BLOCK] Final Status: hidden=${isHidden}, fullscreen=${isFullscreen}, frozen=${currentFrozen}, submitting=${currentSub}, completed=${currentCompleted}`);
+            
+            if ((isHidden || !isFullscreen) && !currentCompleted && !currentSub) {
+              console.log("[BLOCK] AUTO-SUBMITTING because: hidden=" + isHidden + " OR not fullscreen=" + !isFullscreen);
+              toast.error("Block expired but you are not in the quiz tab or fullscreen. Auto-submitting quiz.");
+              // Directly call the submit endpoint since state is unreliable in closure
+              handleSubmit();
+            } else {
+              console.log("[BLOCK] UNFREEZING - user is in fullscreen and tab is visible, or quiz already completed/submitting");
+              setQuizFrozen(false);
+              toast.success("Block expired. You can now continue the quiz.");
+            }
+          }
+        }, 1000); // Update every 1 second for accurate countdown
+        
+        window._blockCountdownInterval = countdownInterval;
+        
+        // Also poll backend every 5 seconds to verify block status
         const pollInterval = setInterval(async () => {
           try {
             const statusRes = await axios.get(
@@ -340,18 +407,8 @@ setTimeLeft(
               { withCredentials: true }
             );
             if (statusRes.data.success) {
-              const newRemaining = statusRes.data.remainingSeconds;
-              setBlockCountdown(newRemaining);
-              if (newRemaining <= 0) {
-                clearInterval(pollInterval);
-                if (document.hidden || !document.fullscreenElement) {
-                  toast.error("Block expired but you are not in the quiz tab or fullscreen. Auto-submitting quiz.");
-                  handleSubmit();
-                } else {
-                  setQuizFrozen(false);
-                  toast.success("Block expired. You can now continue the quiz.");
-                }
-              }
+              // Just verify block status, don't override local countdown
+              console.log(`Block status from server: ${statusRes.data.remainingSeconds}s remaining`);
             }
           } catch (err) {
             console.error("Error polling block status:", err);
@@ -367,7 +424,7 @@ setTimeLeft(
         }
       }
 
-      setSelections(quiz.selections || []);
+      setSelections(selectionsWithQuestions || []); // ✅ Use selectionsWithQuestions instead of quiz.selections
 
       // Load progress if exists
       if (progress) {
@@ -377,7 +434,8 @@ setTimeLeft(
       }
 
       setProgressLoaded(true);
-      await enterFullscreen();
+      // Request fullscreen synchronously (after short delay for render)
+      setTimeout(() => enterFullscreen(), 100);
     } catch (e) {
       console.error(e);
     }
@@ -403,14 +461,14 @@ useEffect(() => {
           flatQuestions.push({
             ...q,
             subcategory: s.subcategory,
-            options: seededShuffle(q.options, student._id + q._id),
+            options: seededShuffle(q.options, student.id + q.id),
             savedSelectedOption: savedAnswer,
           });
         }
       });
     });
 
-    setQuestions(seededShuffle(flatQuestions, student._id + quizId));
+    setQuestions(seededShuffle(flatQuestions, student.id + quizId));
   }
 }, [selections, progressLoaded, student, answers]);
 
@@ -431,19 +489,20 @@ useEffect(() => {
   /* ---------------------
      Save Progress
   --------------------- */
-  const saveProgress = async () => {
+  const saveProgress = async (answerList = answers) => {
     if (quizCompleted || quizFrozen || !progressLoaded) return;
-     const safeTimeLeft =
-    typeof timeLeftRef.current === "number" && timeLeftRef.current >= 0
-      ? timeLeftRef.current
-      : (quiz?.timeLimit || 15) * 60;
-const payload = {
-  currentQuestionIndex,
-  answers,
-  timeLeft: safeTimeLeft,
-};
+    const safeTimeLeft =
+      typeof timeLeftRef.current === "number" && timeLeftRef.current >= 0
+        ? timeLeftRef.current
+        : (quiz?.timeLimit || 15) * 60;
+    
+    const payload = {
+      currentQuestionIndex,
+      answers: answerList,
+      timeLeft: safeTimeLeft,
+    };
 
-    console.log("Saving progress:", payload); // Debug log
+    console.log("Saving progress:", payload);
     setSaving(true);
     setSaveStatus("saving");
     try {
@@ -520,6 +579,40 @@ useEffect(() => {
 }, [progressLoaded, quizCompleted, quizFrozen, submitting, currentQuestionIndex, answers]);
 
   /* ---------------------
+     Strict Fullscreen Enforcement - Block every second if not fullscreen
+  --------------------- */
+  useEffect(() => {
+    if (!progressLoaded || quizCompleted || quizFrozen) return;
+
+    const checkFullscreen = setInterval(() => {
+      const isFullscreen = !!document.fullscreenElement;
+      const isHidden = document.hidden;
+
+      console.log(`[FULLSCREEN CHECK] fullscreen=${isFullscreen}, hidden=${isHidden}`);
+
+      // Block if NOT in fullscreen (unless tab is hidden, which is handled separately)
+      if (!isFullscreen && !isHidden) {
+        console.warn("[CHEAT] Not in fullscreen - blocking immediately");
+        toast.error("🚫 You must stay in fullscreen! You have been blocked from this quiz.");
+        
+        // Use stateRef to get current state, then block
+        if (!stateRef.current.quizFrozen && !stateRef.current.quizCompleted && !stateRef.current.submitting) {
+          setQuizFrozen(true);
+          blockStudent(quizId).then(({ expiresAt, remainingSeconds }) => {
+            if (expiresAt) {
+              // Store expiresAt timestamp so countdown can calculate remaining time dynamically
+              window._blockExpiresAt = expiresAt;
+              setBlockCountdown(remainingSeconds);
+            }
+          }).catch(err => console.error("Failed to block student:", err));
+        }
+      }
+    }, 1000); // Check every 1 second
+
+    return () => clearInterval(checkFullscreen);
+  }, [progressLoaded, quizCompleted, quizFrozen, quizId]);
+
+  /* ---------------------
      Save progress on page unload (WITHOUT blocking on system shutdown)
   --------------------- */
   useEffect(() => {
@@ -555,7 +648,7 @@ useEffect(() => {
   --------------------- */
   const handleOptionClick = (option) => {
     if (quizFrozen || quizCompleted) return;
-    const qId = questions[currentQuestionIndex]?._id.toString();
+    const qId = questions[currentQuestionIndex]?.id; // ✅ Use number ID directly, not string
 
     const updatedAnswers = [...answers];
     const idx = updatedAnswers.findIndex((a) => a.questionId === qId);
@@ -563,16 +656,26 @@ useEffect(() => {
     else updatedAnswers.push({ questionId: qId, selectedOption: option });
     setAnswers(updatedAnswers);
     setSelectedOption(option);
-    // Immediately request a save for this new selection
-    saveProgress().catch((err) =>
+    
+    // DEBUG: Log answer selection
+    console.log(
+      `[ANSWER] Selected Q${qId}: "${option}" | Answers: ${updatedAnswers.length}/${questions.length} | QuestionId=${qId}, currentIndex=${currentQuestionIndex}`
+    );
+    
+    // Immediately request a save for this new selection with the UPDATED answers
+    saveProgress(updatedAnswers).catch((err) =>
       console.error("Immediate save failed:", err)
     );
   };
 
   useEffect(() => {
     const currQ = questions[currentQuestionIndex];
-    const ans = answers.find((a) => a.questionId === currQ?._id);
-    setSelectedOption(ans?.selectedOption ?? currQ?.savedSelectedOption ?? null);
+    const qId = currQ?.id;
+    const ans = answers.find((a) => a.questionId === qId);
+    const selected = ans?.selectedOption ?? currQ?.savedSelectedOption ?? null;
+    
+    console.log(`[SELECT RESTORE] Index ${currentQuestionIndex}, qId=${qId}, found answer=${!!ans}, selectedOption=${selected}, savedSelectedOption=${currQ?.savedSelectedOption}`);
+    setSelectedOption(selected);
   }, [currentQuestionIndex, questions, answers]);
 
   /* ---------------------
@@ -605,9 +708,9 @@ const handleSubmit = async () => {
 
     // Prepare answers in the format backend expects, including unanswered as null
     const enrichedAnswers = questions.map(question => {
-      const existingAnswer = answers.find(a => a.questionId === question._id.toString());
+      const existingAnswer = answers.find(a => a.questionId === question.id); // ✅ Use number ID
       return {
-        questionId: question._id.toString(),
+        questionId: question.id, // ✅ Send as number
         answer: existingAnswer ? existingAnswer.selectedOption : null, // null for unanswered
         subcategory: question.subcategory || "Unknown",
       };
@@ -657,7 +760,8 @@ const handleSubmit = async () => {
           toast.error("You exited fullscreen! You have been blocked from this quiz.");
 
           try {
-            const remainingSeconds = await blockStudent(quizId);
+            const { expiresAt, remainingSeconds } = await blockStudent(quizId);
+            window._blockExpiresAt = expiresAt; // Store for countdown calculation
             setBlockCountdown(remainingSeconds);
 
             // Poll backend every 5 seconds for accurate remaining time
@@ -697,16 +801,51 @@ const handleSubmit = async () => {
 
       // Prevent ESC from exiting fullscreen by blocking
       const handleKeyDown = (e) => {
-        if (e.key === 'Escape' && !quizCompleted) {
-          e.preventDefault();
-          handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, cheatWarningShown);
+        if (!quizCompleted) {
+          // ESC key - tries to exit fullscreen
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            console.warn("[CHEAT] ESC key pressed - blocking");
+            toast.error("🚫 ESC key is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+          
+          // Windows/Meta key (Win key)
+          if (e.key === 'Meta' || e.key === 'OS') {
+            e.preventDefault();
+            console.warn("[CHEAT] Windows/Meta key pressed - blocking");
+            toast.error("🚫 Windows key is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+          
+          // F11 key (tries to toggle fullscreen manually)
+          if (e.key === 'F11') {
+            e.preventDefault();
+            console.warn("[CHEAT] F11 key pressed - blocking");
+            toast.error("🚫 F11 is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+          
+          // Alt+Tab equivalent for Linux/Mac (Cmd+Tab)
+          if (e.ctrlKey && e.key === 'Tab') {
+            e.preventDefault();
+            console.warn("[CHEAT] Alt+Tab pressed - blocking");
+            toast.error("🚫 Tab switching is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
         }
       };
 
       document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('keydown', handleKeyDown);
 
       return () => {
         document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        document.removeEventListener('keydown', handleKeyDown);
       };
     }
   }, [showStartingLoader, quizCompleted]);
@@ -726,7 +865,8 @@ const handleSubmit = async () => {
         enterFullscreen();
 
         try {
-          const remainingSeconds = await blockStudent(quizId);
+          const { expiresAt, remainingSeconds } = await blockStudent(quizId);
+          window._blockExpiresAt = expiresAt; // Store for countdown calculation
           setBlockCountdown(remainingSeconds);
 
           // Poll backend every 5 seconds for accurate remaining time
@@ -780,31 +920,35 @@ const handleSubmit = async () => {
       window.history.pushState({ quizState: i, timestamp: Date.now() }, "", window.location.href);
     }
 
-    let backAttemptBlocked = false;
     let lastBackAttemptTime = 0;
 
     const handleBackAttempt = async (attemptType = "back") => {
-      // Prevent multiple rapid back button clicks
-      const now = Date.now();
-      if (backAttemptBlocked && (now - lastBackAttemptTime < 3000)) {
-        return; // Silently ignore rapid repeated attempts
+      // Check if already frozen or completed
+      if (stateRef.current.quizFrozen || stateRef.current.quizCompleted) {
+        return; // Already blocked, ignore
       }
 
-      // First attempt - immediately block
-      if (!backAttemptBlocked && !quizFrozen) {
-        backAttemptBlocked = true;
-        lastBackAttemptTime = now;
-        
-        console.warn(`Student attempted ${attemptType} navigation - immediately blocking`);
-        toast.error(`🚫 ${attemptType === 'back' ? 'Back' : 'Forward'} button is disabled! Block applied - cheating detected.`);
-        
-        // Immediately trigger cheating detection with blocking
-        handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
-        
-        // Reset after 5 seconds so repeated attempts aren't silently ignored
-        setTimeout(() => {
-          backAttemptBlocked = false;
-        }, 5000);
+      // Prevent multiple rapid back button clicks (spam protection)
+      const now = Date.now();
+      if (now - lastBackAttemptTime < 500) {
+        return; // Silently ignore if spamming
+      }
+
+      lastBackAttemptTime = now;
+      
+      console.warn(`[CHEAT] Student attempted ${attemptType} navigation - blocking immediately`);
+      toast.error(`🚫 ${attemptType === 'back' ? 'Back' : 'Forward'} button is disabled! You have been blocked from this quiz.`);
+      
+      // Immediately trigger blocking
+      setQuizFrozen(true);
+      try {
+        const { expiresAt, remainingSeconds } = await blockStudent(quizId);
+        if (expiresAt) {
+          window._blockExpiresAt = expiresAt; // Store for countdown calculation
+        }
+        setBlockCountdown(remainingSeconds);
+      } catch (err) {
+        console.error(`Failed to block student on ${attemptType} attempt:`, err);
       }
       
       // Push state again to maintain the buffer
@@ -1023,136 +1167,11 @@ const handleSubmit = async () => {
   }, [student, quizId, cheatWarningShown, quizCompleted, quizFrozen]);
 
   /* ---------------------
-     Prevent Inspect and Cheating
+     Prevent Inspect and Cheating - DISABLED FOR DEBUGGING
+     TODO: Re-enable before production
   --------------------- */
-  useEffect(() => {
-    const preventInspect = (e) => {
-      e.preventDefault();
-      return false;
-    };
-
-    const preventKeys = (e) => {
-      // Disable all inspection tools
-      if (
-        e.key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-        (e.ctrlKey && e.shiftKey && e.key === 'J') ||
-        (e.ctrlKey && e.shiftKey && e.key === 'C') ||
-        (e.ctrlKey && e.key === 'u') ||
-        (e.ctrlKey && e.key === 's')
-      ) {
-        e.preventDefault();
-        toast.error("Inspecting is not allowed!");
-        return false;
-      }
-
-      // Disable Tab key to prevent tab switching
-      if (e.key === 'Tab') {
-        e.preventDefault();
-        toast.error("Tab navigation is disabled during quiz!");
-        return false;
-      }
-
-      // Disable Alt key combinations (Alt+Tab, Alt+F4, etc)
-      if (e.altKey && (e.key === 'Tab' || e.key === 'F4')) {
-        e.preventDefault();
-        toast.error("Alt+Tab and Alt+F4 are disabled!");
-        return false;
-      }
-
-      // Disable Windows/Meta key during entire quiz - SILENT BLOCKING (NO MESSAGE)
-      if (e.key === 'Meta' || e.key === 'OS') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        return false;
-      }
-
-      // Disable Ctrl+Alt+Delete (though browser can't fully prevent this)
-      if (e.ctrlKey && e.altKey && e.key === 'Delete') {
-        e.preventDefault();
-        return false;
-      }
-
-      // Disable Alt+Tab globally
-      if (e.altKey && e.key === 'Tab') {
-        e.preventDefault();
-        toast.error("Switching applications is not allowed!");
-        return false;
-      }
-
-      // Disable Ctrl+W (close tab)
-      if (e.ctrlKey && e.key === 'w') {
-        e.preventDefault();
-        toast.error("Closing tabs is not allowed!");
-        return false;
-      }
-
-      // Disable Ctrl+T (new tab)
-      if (e.ctrlKey && e.key === 't') {
-        e.preventDefault();
-        toast.error("Opening new tabs is not allowed!");
-        return false;
-      }
-
-      // Disable Ctrl+N (new window)
-      if (e.ctrlKey && e.key === 'n') {
-        e.preventDefault();
-        toast.error("Opening new windows is not allowed!");
-        return false;
-      }
-
-      return true;
-    };
-
-    // Additional handler for keyup to prevent Windows key from doing anything
-    const preventWindowsKeyUp = (e) => {
-      if (e.key === 'Meta' || e.key === 'OS') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        return false;
-      }
-    };
-
-    // Additional handler for keypress to prevent Windows key
-    const preventWindowsKeyPress = (e) => {
-      if (e.key === 'Meta' || e.key === 'OS') {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        return false;
-      }
-    };
-
-    const preventCopy = (e) => {
-      e.preventDefault();
-      toast.error("Copying is not allowed!");
-      return false;
-    };
-
-    document.addEventListener('contextmenu', preventInspect);
-    document.addEventListener('keydown', preventKeys);
-    document.addEventListener('keyup', preventWindowsKeyUp, true); // Use capture phase
-    document.addEventListener('keypress', preventWindowsKeyPress, true); // Use capture phase
-    document.addEventListener('copy', preventCopy);
-    document.addEventListener('paste', preventCopy);
-    document.addEventListener('cut', preventCopy);
-
-    // Also add listener to window to catch at the highest level
-    window.addEventListener('keydown', preventKeys);
-
-    return () => {
-      document.removeEventListener('contextmenu', preventInspect);
-      document.removeEventListener('keydown', preventKeys);
-      document.removeEventListener('keyup', preventWindowsKeyUp, true);
-      document.removeEventListener('keypress', preventWindowsKeyPress, true);
-      document.removeEventListener('copy', preventCopy);
-      document.removeEventListener('paste', preventCopy);
-      document.removeEventListener('cut', preventCopy);
-      window.removeEventListener('keydown', preventKeys);
-    };
-  }, [quizFrozen]);
+  // Inspection blocker disabled for development/debugging purposes
+  // Re-enable by uncommenting when deploying to production
 
   /* ---------------------
      ESC Key Listener - Block Immediately on First Press
@@ -1216,7 +1235,12 @@ const handleSubmit = async () => {
     
     navigate("/");
   };
-  const isAnswered = (i) => answers.some((a) => a.questionId === questions[i]?._id);
+  const isAnswered = (i) => {
+    const qId = questions[i]?.id;
+    const hasAnswer = answers.some((a) => a.questionId === qId);
+    console.log(`[ANSWERED CHECK] Index ${i}, qId=${qId}, hasAnswer=${hasAnswer}, answersArray=${JSON.stringify(answers)}`);
+    return hasAnswer;
+  };
 
   /* ---------------------
      Loading / Countdown
@@ -1331,7 +1355,7 @@ const handleSubmit = async () => {
               <NavigationButtons
                 currentIndex={currentQuestionIndex}
                 totalQuestions={questions.length}
-                canSubmit={answers.length === questions.length}
+                canSubmit={questions.length > 0 && answers.length === questions.length}
                 onPrev={() => {
                   setCurrentQuestionIndex((i) => Math.max(0, i - 1));
                   saveProgress();

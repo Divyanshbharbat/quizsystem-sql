@@ -175,7 +175,7 @@ const StudentDetails = () => {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredStudents.map((student) => (
-                  <tr key={student._id} className="hover:bg-gray-50">
+                  <tr key={student.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">{student.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{student.studentId}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{student.email}</td>
@@ -190,7 +190,7 @@ const StudentDetails = () => {
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDeleteStudent(student._id)}
+                        onClick={() => handleDeleteStudent(student.id)}
                         className="text-red-600 hover:text-red-800"
                         title="Delete"
                       >

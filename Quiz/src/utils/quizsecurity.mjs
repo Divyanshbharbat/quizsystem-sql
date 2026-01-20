@@ -155,11 +155,11 @@ export const handleCheatingDetected = async (
 
 // Block student from backend
 
-// simple block request that returns remaining seconds
+// ✅ FIXED: Returns expiresAt timestamp so countdown can be calculated dynamically
 export const blockStudent = async (quizId) => {
   if (!quizId) {
     console.error("blockStudent: quizId required");
-    return null;
+    return { expiresAt: null, remainingSeconds: 0 };
   }
 
   try {
@@ -169,11 +169,14 @@ export const blockStudent = async (quizId) => {
       { withCredentials: true }
     );
 
-    // Return remaining seconds from backend (caller will manage UI countdown)
-    return data?.remainingSeconds ?? 30;
+    // ✅ Return BOTH expiresAt timestamp AND remainingSeconds for dynamic countdown
+    return {
+      expiresAt: data?.expiresAt, // Timestamp in milliseconds
+      remainingSeconds: data?.remainingSeconds ?? 30,
+    };
   } catch (e) {
     console.error("Error blocking student:", e);
-    return null;
+    return { expiresAt: null, remainingSeconds: 0 };
   }
 };
 

@@ -2,10 +2,8 @@ import express from 'express';
 import { 
     createQuiz, 
     deleteQuiz,
-    getQuiz, 
-   
- 
-   saveProgress,
+    getQuiz,
+    saveProgress,
     createQuizByFaculty,getQuizSubmissions,
     getQuizTitleById,
     blockStudent,
@@ -57,7 +55,7 @@ router.get('/title/:quizId',getQuizTitleById)
 router.get('/:quizId/block-status', isAuthenticated, getBlockStatus);
 
 // Submit a quiz
-router.post('/:quizId/submit', protect2, submitQuiz);
+router.post('/:quizId/submit', isAuthenticated, submitQuiz);
 import { createQuizConfig } from '../controllers/quizController.js';
 router.post("/create-config", createQuizConfig);
 
@@ -67,6 +65,9 @@ router.post("/create-config", createQuizConfig);
 router.post("/upload",createQuizByFaculty)
 import { unblockStudent } from '../controllers/quizController.js';
 router.post("/:quizId/unblock-student", unblockStudent);
-router.post("/:quizId/block-student",isAuthenticated ,blockStudent);
+router.post("/:quizId/block-student", isAuthenticated, blockStudent);
+
+// Block student (alias for block-student for frontend compatibility)
+router.post("/:quizId/block", isAuthenticated, blockStudent);
 
 export default router;

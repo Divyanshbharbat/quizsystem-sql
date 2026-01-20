@@ -43,7 +43,7 @@ const BlockedStudent = () => {
             ? {
                 ...q,
                 blockedStudents: q.blockedStudents.filter(
-                  (s) => s._id !== studentId
+                  (s) => s.id !== studentId
                 ),
               }
             : q
@@ -113,14 +113,14 @@ const BlockedStudent = () => {
                   ) : (
                     <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                       {quiz.blockedStudents.map((student) => (
-                        <li key={student._id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 rounded-md p-3">
+                        <li key={student.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gray-50 rounded-md p-3">
                           <div>
                             <p className="font-semibold text-gray-800">{student.name} <span className="text-sm text-gray-500">({student.studentId})</span></p>
                             <p className="text-sm text-gray-500">{student.email} • Year {student.year}</p>
                           </div>
                           <div className="flex-shrink-0">
                             <button
-                              onClick={() => handleUnblock(quiz.quizId, student._id)}
+                              onClick={() => handleUnblock(quiz.quizId, student.id)}
                               className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition"
                             >
                               Unfreeze

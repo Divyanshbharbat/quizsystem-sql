@@ -82,7 +82,7 @@ const seedFaculty = async () => {
       department: "CIVIL",
       phone: "9876514816",
       password: hashedPassword,
-      isAdmin: false,
+      isAdmin: true,
 
       // ✅ REQUIRED FIELDS (ADD THESE)
       session: "2024-25",
@@ -103,7 +103,8 @@ const connectDB = async () => {
     await sequelize.authenticate();
     console.log("✅ MySQL connected");
 
-    await sequelize.sync({ alter: true });
+    // Force sync to recreate missing tables (QuizConfig)
+    await sequelize.sync({ force: false, alter: true });
     console.log("✅ All tables synced");
 
     await seedFaculty();

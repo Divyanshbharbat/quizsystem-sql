@@ -1,12 +1,12 @@
 // middleware/facultyAuth.js
 import jwt from "jsonwebtoken";
-import Faculty from "../models/Faculty.js"; // your faculty model
+import Faculty from "../models/Faculty.js"; // your Sequelize model
 
 export const isFacultyAuthenticated = async (req, res, next) => {
   try {
     // Get token from cookie or Authorization header
     const token =
-      req.cookies.token || req.headers.authorization?.split(" ")[1];
+      req.cookies?.token || req.headers.authorization?.split(" ")[1];
 
     if (!token) {
       return res
@@ -15,10 +15,10 @@ export const isFacultyAuthenticated = async (req, res, next) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, "divyansh"); // same secret as login
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "divyansh");
 
-    // Find faculty by ID from token
-    const faculty = await Faculty.findById(decoded.id);
+    // Find faculty by PK (Sequelize)
+    const faculty = await Faculty.findByPk(decoded.id);
     if (!faculty) {
       return res
         .status(401)

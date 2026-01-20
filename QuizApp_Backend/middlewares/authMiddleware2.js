@@ -3,30 +3,45 @@ import Student from "../models/Student.js";
 
 export const isAuthenticated = async (req, res, next) => {
   try {
- 
-    const token = req.cookies.token || req.headers.authorization?.split(" ")[1];
-   
-    if (!token) {
-      return res.status(401).json({ success: false, message: "Not logged in" });
+    let token;
+
+    // 1️⃣ Check Authorization header
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith("Bearer ")
+    ) {
+      token = req.headers.authorization.split(" ")[1];
     }
 
- 
-   
-const decoded = jwt.verify(token, 'divyansh');
+    // 2️⃣ Fallback to cookie
+    if (!token && req.cookies?.studenttoken) {
+      token = req.cookies.studenttoken;
+    }
 
+    if (!token) {
+      return res.status(401).json({ message: "No token provided" });
+    }
 
-const student = await Student.findById(decoded.id); // Pass ID directly
+    // 3️⃣ Verify token
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET || "divyansh"
+    );
 
+    // 4️⃣ Find student by PRIMARY KEY (MySQL safe)
+    const student = await Student.findByPk(decoded.id);
 
-if (!student) {
-  return res.status(401).json({ success: false, message: "Student not found" });
-}
+    if (!student) {
+      return res.status(401).json({ message: "Student not found" });
+    }
 
-    req.user = student;
+    // 5️⃣ Attach student to request (Mongo + MySQL compatibility)
+    req.student = student;
+    req.user = { id: student.id };
 
     next();
-  } catch (err) {
-    console.error(err);
-    res.status(401).json({ success: false, message: "Unauthorized" });
+  } catch (error) {
+    console.error("Auth error:", error.message);
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };

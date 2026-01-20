@@ -34,7 +34,7 @@ const CreateMyQuizzes = () => {
     setError("");
     try {
    const res = await axios.get(
-  `${import.meta.env.VITE_APP}/api/faculty/${facultyDetails._id}/quizzes`
+  `${import.meta.env.VITE_APP}/api/faculty/${facultyDetails.id}/quizzes`
 );
 
 
@@ -76,7 +76,7 @@ const CreateMyQuizzes = () => {
 
       const data = res.data;
       if (data.success) {
-        const updated = quizzes.filter((q) => q._id !== quizId);
+        const updated = quizzes.filter((q) => q.id !== quizId);
         setQuizzes(updated);
         applyFilters(updated, searchTerm, selectedSession);
         toast.success("Quiz deleted successfully!");
@@ -190,11 +190,11 @@ const CreateMyQuizzes = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {filteredQuizzes.map((quiz) => (
                     <tr
-                      key={quiz._id}
+                      key={quiz.id}
                       className="hover:bg-gray-50 transition"
                     >
                       <td className="px-6 py-4 text-sm text-gray-700">
-                        {quiz._id}
+                        {quiz.id}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-800">
                         {quiz.title}
@@ -216,13 +216,13 @@ const CreateMyQuizzes = () => {
                       </td>
                       <td className="px-6 py-4 flex justify-center space-x-2">
                         <button
-                          onClick={() => navigate(`/quiz-results/${quiz._id}`)}
+                          onClick={() => navigate(`/quiz-results/${quiz.id}`)}
                           className="px-3 py-1 bg-[#243278]  hover:bg-[#2e3f98]  text-white text-sm rounded-md transition"
                         >
                           View
                         </button>
                         <button
-                          onClick={() => handleDeleteQuiz(quiz._id)}
+                          onClick={() => handleDeleteQuiz(quiz.id)}
                           className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-sm rounded-md transition"
                         >
                           Delete

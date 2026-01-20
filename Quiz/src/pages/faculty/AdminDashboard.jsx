@@ -125,7 +125,7 @@ const AdminDashboard = () => {
     try {
       if (selectedFaculty) {
         const res = await axios.put(
-          `${import.meta.env.VITE_APP}/api/faculty/update/${selectedFaculty._id}`,
+          `${import.meta.env.VITE_APP}/api/faculty/update/${selectedFaculty.id}`,
           formFaculty
         );
 
@@ -270,7 +270,7 @@ const AdminDashboard = () => {
 
             <button
               className="px-4 py-2 bg-red-600 text-white rounded-md"
-              onClick={() => handleDeleteFaculty(viewFaculty._id)}
+              onClick={() => handleDeleteFaculty(viewFaculty.id)}
             >
               Delete
             </button>
@@ -348,11 +348,11 @@ const AdminDashboard = () => {
                 <tbody className="divide-y text-sm">
                   {(searchTerm || sessionFilter ? filteredFaculties : faculties).map(
                     (faculty, index) => (
-                      <tr key={faculty._id} className="hover:bg-gray-50">
+                      <tr key={faculty.id} className="hover:bg-gray-50">
                         <td className="px-6 py-3">{index + 1}</td>
 
                         <td className="px-6 py-3">
-                          {faculty._id.slice(0, 10)}...
+                          {faculty.id.slice(0, 10)}...
                         </td>
 
                         <td className="px-6 py-3 font-semibold">
@@ -504,7 +504,7 @@ const AdminDashboard = () => {
                   <button
                     type="button"
                     className="px-5 py-2 bg-red-600 text-white rounded-md"
-                    onClick={() => handleDeleteFaculty(selectedFaculty._id)}
+                    onClick={() => handleDeleteFaculty(selectedFaculty.id)}
                   >
                     Delete
                   </button>

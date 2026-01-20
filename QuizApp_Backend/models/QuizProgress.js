@@ -11,12 +11,12 @@ const QuizProgress = sequelize.define(
     },
 
     studentId: {
-      type: DataTypes.INTEGER, // FK → students.id
+      type: DataTypes.INTEGER,
       allowNull: false
     },
 
     quizId: {
-      type: DataTypes.INTEGER, // FK → quizzes.id
+      type: DataTypes.INTEGER,
       allowNull: false
     },
 
@@ -25,8 +25,14 @@ const QuizProgress = sequelize.define(
       defaultValue: 0
     },
 
+    answers: {
+      type: DataTypes.JSON, // ✅ REQUIRED
+      allowNull: false,
+      defaultValue: []
+    },
+
     timeLeft: {
-      type: DataTypes.INTEGER, // seconds
+      type: DataTypes.INTEGER,
       allowNull: false
     },
 
@@ -46,7 +52,8 @@ const QuizProgress = sequelize.define(
     indexes: [
       {
         unique: true,
-        fields: ["studentId", "quizId"] // same as MongoDB compound index
+        name: "uniq_student_quiz", // ✅ IMPORTANT: named index
+        fields: ["studentId", "quizId"]
       }
     ]
   }

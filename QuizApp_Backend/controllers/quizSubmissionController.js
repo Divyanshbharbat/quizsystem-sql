@@ -13,91 +13,137 @@ import QuizProgress from "../models/QuizProgress.js";
 import QuizConfig from "../models/QuizConfig.js";
 
 
-
 export const submitQuiz = async (req, res) => {
-  const { quizId } = req.params;
-  const studentId = req.user._id.toString();
-  const { answers } = req.body; // [{ questionId, answer }, ...]
-
   try {
-    // 1️⃣ Fetch quiz configuration
-    const quizConfig = await QuizConfig.findById(quizId);
+    const { quizId } = req.params;
+    const studentId = req.user.id; // from isAuthenticated middleware
+    let { answers } = req.body; // [{ questionId, selectedOption, subcategory }]
+
+    if (!Array.isArray(answers)) answers = [];
+
+    console.log(`[SUBMIT] Student ${studentId} submitting quiz ${quizId}`);
+    console.log(`[SUBMIT] Received ${answers.length} answers`);
+    console.log(`[SUBMIT] Sample answers:`, answers.slice(0, 3));
+
+    // 1️⃣ Fetch QuizConfig
+    const quizConfig = await QuizConfig.findByPk(quizId);
     if (!quizConfig) {
       return res.status(404).json({ success: false, message: "Quiz not found" });
     }
 
+    const completed = quizConfig.completed || [];
+
     // 2️⃣ Check if student already submitted
-    const alreadyCompleted = quizConfig.completed.some(
-      entry => entry.student.toString() === studentId
-    );
+    const alreadyCompleted = completed.some(entry => entry.studentId === studentId);
     if (alreadyCompleted) {
       return res.status(403).json({ success: false, message: "Quiz already submitted" });
     }
 
-    // 3️⃣ Calculate scores
-    let totalScore = 0;
-    const subcategoryScores = [];
-
-    for (const selection of quizConfig.selections) {
-      const allQuestions = [];
-
-      const quizzes = await Quiz.find({
-        "categories.category": quizConfig.category,
-        "categories.subcategory": selection.subcategory
-      });
-
-      quizzes.forEach(quiz => {
-        quiz.categories?.forEach(cat => {
-          if (cat.category === quizConfig.category && cat.subcategory === selection.subcategory) {
-            if (Array.isArray(cat.questions)) allQuestions.push(...cat.questions);
-          }
-        });
-      });
-
-      const answersForSubcategory = answers.filter(a =>
-        allQuestions.some(q => q._id.toString() === a.questionId)
-      );
-
-      let subScore = 0;
-      answersForSubcategory.forEach(a => {
-        const question = allQuestions.find(q => q._id.toString() === a.questionId);
-        if (question && question.answer === a.answer) subScore++;
-      });
-
-      totalScore += subScore;
-
-      subcategoryScores.push({
-        subcategory: selection.subcategory,
-        score: subScore,
-        totalQuestions: selection.questionCount,
-        percentage: selection.questionCount > 0 ? (subScore / selection.questionCount) * 100 : 0,
-      });
+    // 3️⃣ Fetch Quiz questions
+    const quiz = await Quiz.findByPk(quizId);
+    if (!quiz) {
+      return res.status(404).json({ success: false, message: "Quiz questions not found" });
     }
 
-    // 4️⃣ Update QuizConfig.completed
-    quizConfig.completed.push({
-      student: studentId,
+    let totalScore = 0;
+    const subcategoryScores = {};
+
+    // Build question map for quick scoring
+    // Format: { "subcategory_index": { answer, subcategory } }
+    const questionMap = {};
+    const categories = Array.isArray(quiz.categories) ? quiz.categories : [];
+
+    // For each selection in quizConfig, find matching questions
+    quizConfig.selections.forEach((selection) => {
+      let selectionQuestions = [];
+      
+      // Find all questions matching this subcategory from all quizzes
+      categories.forEach((cat) => {
+        if (cat.subcategory === selection.subcategory && Array.isArray(cat.questions)) {
+          selectionQuestions.push(...cat.questions);
+        }
+      });
+
+      // Remove duplicates by question text
+      const uniqueQuestions = Array.from(
+        new Map(
+          selectionQuestions
+            .filter((q) => q && q.question && Array.isArray(q.options))
+            .map((q) => [q.question, q])
+        ).values()
+      );
+
+      // Map each question with its ID format (subcategory_index)
+      uniqueQuestions.slice(0, selection.questionCount).forEach((q, index) => {
+        const questionId = `${selection.subcategory}_${index}`;
+        questionMap[questionId] = {
+          answer: q.answer,
+          subcategory: selection.subcategory
+        };
+      });
+    });
+
+    console.log(`[SUBMIT] Built questionMap with ${Object.keys(questionMap).length} questions`);
+
+    // ✅ Score each submitted answer (handle null/unanswered)
+    Object.keys(questionMap).forEach(qId => {
+      const { answer: correctAnswer, subcategory } = questionMap[qId];
+
+      if (!subcategoryScores[subcategory]) {
+        subcategoryScores[subcategory] = { correct: 0, total: 0 };
+      }
+      subcategoryScores[subcategory].total++;
+
+      const submittedAnswer = answers.find(a => a.questionId === qId);
+      const selectedOption = submittedAnswer?.selectedOption ?? null;
+
+      if (selectedOption === correctAnswer) {
+        subcategoryScores[subcategory].correct++;
+        totalScore++;
+      }
+    });
+
+    // Format subcategory scores for storage
+    const formattedScores = Object.entries(subcategoryScores).map(([subcategory, scores]) => ({
+      subcategory,
+      score: scores.correct,
+      totalQuestions: scores.total,
+      percentage: scores.total > 0 ? (scores.correct / scores.total) * 100 : 0
+    }));
+
+    console.log(`[SUBMIT] Total Score: ${totalScore}/${Object.keys(questionMap).length}`);
+    console.log(`[SUBMIT] Subcategory Scores:`, formattedScores);
+
+    // 4️⃣ Save submission to QuizConfig.completed (JSON)
+    completed.push({
+      studentId,
       score: totalScore,
-      subcategoryScores,
+      subcategoryScores: formattedScores,
       submittedAt: new Date()
     });
+
+    quizConfig.completed = completed;
     await quizConfig.save();
 
-    // 5️⃣ Delete QuizProgress (no longer needed)
-    await QuizProgress.deleteOne({ student: studentId, quiz: quizId });
+    console.log(`[SUBMIT] Quiz marked as completed for student ${studentId}`);
 
-    res.json({
+    // 5️⃣ Delete progress
+    await QuizProgress.destroy({ where: { studentId, quizId } });
+    console.log(`[SUBMIT] Progress deleted for student ${studentId}`);
+
+    return res.json({
       success: true,
       message: "Quiz submitted successfully",
       totalScore,
-      subcategoryScores
+      subcategoryScores: formattedScores
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: error.message });
+    console.error("[SUBMIT] Quiz submission error:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 

@@ -1,11 +1,11 @@
 import Student from "../models/Student.js";
 import Faculty from "../models/Faculty.js";
 import QuizConfig from "../models/QuizConfig.js";
-import QuizSubmission from "../models/QuizSubmission.js";
+
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { transporter } from "./mailer.js"; // nodemailer transporter
-
+import { Op } from "sequelize";
 // ---------------- GENERATE JWT TOKEN ----------------
 const generateToken = (user) => {
   return jwt.sign(
@@ -65,47 +65,93 @@ export const registerStudent = async (req, res) => {
 // ---------------- LOGIN STUDENT ----------------
 export const loginStudent = async (req, res) => {
   const { uid, password, quizId } = req.body;
-  if (!uid || !password || !quizId)
-    return res.status(400).json({ success: false, message: "UID, password, and quizId required" });
+console.log("Login attempt:", { uid, quizId });
+  // ------------------ Validate input ------------------
+  if (!uid || !password || !quizId) {
+    return res.status(400).json({
+      success: false,
+      message: "UID, password, and quizId are required",
+    });
+  }
 
   try {
+    // ------------------ Find student ------------------
     const student = await Student.findOne({ where: { studentId: uid } });
-    if (!student) return res.status(401).json({ success: false, message: "Invalid UID or password" });
+    console.log("Found student:", student);
+    if (!student) {
+      return res.status(401).json({ success: false, message: "Invalid UID or password" });
+    }
 
-    const isMatch = await bcrypt.compare(password, student.password);
-    if (!isMatch) return res.status(401).json({ success: false, message: "Invalid UID or password" });
+    // ------------------ Check password ------------------
+    const isMatch = await student.matchPassword(password);
+    console.log("Password match:", isMatch);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "Invalid UID or password" });
+    }
 
-    const quiz = await QuizConfig.findByPk(quizId, { include: Faculty });
-    if (!quiz) return res.status(404).json({ success: false, message: "Quiz not found" });
-
-    // Check if student already submitted (stored in QuizSubmission table)
-    const alreadyCompleted = await QuizSubmission.findOne({
-      where: { quizConfigId: quizId, studentId: student.id },
+    // ------------------ Fetch quiz with Faculty ------------------
+    const quiz = await QuizConfig.findByPk(quizId, {
+      include: {
+        model: Faculty,
+        as: "faculty", // must match the association defined in models/index.js
+        attributes: ["id", "name", "email", "department"],
+      },
     });
-    if (alreadyCompleted)
+console.log("Fetched quiz:", quiz);
+    if (!quiz) {
+      return res.status(404).json({ success: false, message: "Quiz not found" });
+    }
+
+    // ------------------ Check if student already completed ------------------
+    const alreadyCompleted = (quiz.completed || []).some(
+      (entry) => entry.student === student.id
+    );
+
+    if (alreadyCompleted) {
       return res.status(403).json({
         success: false,
         message: "You have already submitted this quiz",
         data: { quizId, completed: true },
       });
+    }
 
+    // ------------------ Generate token ------------------
     const token = generateToken(student);
 
-    res.cookie("token", token, {
+    // ------------------ Set cookie ------------------
+    res.cookie("studenttoken", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       sameSite: "lax",
     });
 
+    // ------------------ Return success ------------------
     res.status(200).json({
       success: true,
       message: "Student logged in successfully",
-      data: { student, quizId, completed: false },
+      data: {
+        student: {
+          id: student.id,
+          name: student.name,
+          studentId: student.studentId,
+          year: student.year,
+          department: student.department,
+          email: student.email,
+          phone: student.phone,
+        },
+        quizId,
+        completed: false,
+        faculty: quiz.faculty, // include faculty info if needed
+      },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    console.error("Login Error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
 
@@ -365,7 +411,8 @@ export const getStudentByStudentID = async (req, res) => {
 // ---------------- GET LOGGED-IN STUDENT ----------------
 export const getStudentMe = async (req, res) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.cookies?.studenttoken;
+    console.log("getbyme token:", token);
     if (!token) return res.status(401).json({ success: false, message: "No token provided" });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "divyansh");
@@ -401,36 +448,48 @@ export const getStudentQuizzes = async (req, res) => {
   try {
     const { studentId } = req.params;
 
-    const submissions = await QuizSubmission.findAll({
-      where: { studentId },
-      include: [{ model: QuizConfig, attributes: ["title", "category", "timeLimit"] }],
-      order: [["createdAt", "DESC"]],
+    // Get all QuizConfigs and filter by student's completed submissions
+    const allQuizConfigs = await QuizConfig.findAll();
+
+    const studentResults = [];
+
+    allQuizConfigs.forEach((quizConfig) => {
+      const completed = quizConfig.completed || [];
+      const studentSubmission = completed.find((c) => String(c.student) === String(studentId));
+
+      if (studentSubmission) {
+        const totalQuestions = studentSubmission.subcategoryScores?.reduce((acc, s) => acc + s.totalQuestions, 0) || 0;
+        const totalScore = studentSubmission.score || 0;
+        const percentage = totalQuestions > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
+
+        studentResults.push({
+          quizId: quizConfig.id,
+          quizTitle: quizConfig.title,
+          category: quizConfig.category,
+          timeLimit: quizConfig.timeLimit,
+          score: totalScore,
+          totalQuestions,
+          percentage,
+          subcategoryScores: studentSubmission.subcategoryScores || [],
+          submittedAt: studentSubmission.submittedAt,
+        });
+      }
     });
 
-    const result = submissions.map((sub) => {
-      const totalQuestions = sub.subcategoryScores?.reduce((acc, s) => acc + s.totalQuestions, 0) || 0;
-      const totalScore = sub.score || 0;
-      const percentage = totalQuestions > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
-
-      return {
-        quizId: sub.quizConfigId,
-        title: sub.QuizConfig.title,
-        category: sub.QuizConfig.category,
-        timeLimit: sub.QuizConfig.timeLimit,
-        submittedAt: sub.submittedAt,
-        score: totalScore,
-        totalQuestions,
-        percentage,
-        subcategories: sub.subcategoryScores || [],
-      };
+    // Sort by submission date (newest first)
+    studentResults.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
+console.log("Student quizzes fetched:", studentResults);
+    res.json({
+      success: true,
+      data: studentResults,
     });
-
-    res.json({ success: true, data: result });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
+
+// ================  MORE FUNCTIONS ================
 
 // ---------------- GET QUIZ RESULT ----------------
 export const getQuizResult = async (req, res) => {

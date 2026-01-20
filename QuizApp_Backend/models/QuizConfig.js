@@ -48,7 +48,7 @@ const QuizConfig = sequelize.define(
     // ================= CREATED BY =================
     createdBy: {
       // Mongo ObjectId → stored as STRING in MySQL
-      type: DataTypes.STRING,
+      type: DataTypes.INTEGER,
       allowNull: false
     },
 

@@ -29,7 +29,7 @@ router.post('/forgot-password', forgotPassword);
 router.post("/reset-password/:token", resetPassword);
 router.post("/verify-otp", verifyOtp);
 // Student profile & info routes
-router.get('/me', protect, getStudentMe);
+router.get('/me', getStudentMe);
 router.get('/studentId/:studentId', getStudentByStudentID);
 router.get('/id/:id', getStudentByStudentID);
 router.get('/info', getStudentByName);
