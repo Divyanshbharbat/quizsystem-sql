@@ -471,7 +471,8 @@ const CreateQuiz2 = () => {
               <tbody>
                 {Object.values(groupedQuizConfigs).map((quiz, i) => (
                   <tr key={quiz.quizConfigId}>
-                    <td>{i + 1}</td>
+                   <td>{quiz.quizConfigId}</td>
+
                     <td>{quiz.title}</td>
 
                     {facultyDetails?.isAdmin && (

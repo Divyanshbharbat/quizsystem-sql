@@ -31,6 +31,19 @@ const QuizProgress = sequelize.define(
       defaultValue: []
     },
 
+    questionMap: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+      /* Store the question data shown to student for consistent scoring:
+        {
+          "Arrays_0": { question, options, answer },
+          "Linked List_0": { question, options, answer },
+          ...
+        }
+      */
+    },
+
     timeLeft: {
       type: DataTypes.INTEGER,
       allowNull: false

@@ -710,11 +710,13 @@ const handleSubmit = async () => {
     const enrichedAnswers = questions.map(question => {
       const existingAnswer = answers.find(a => a.questionId === question.id); // ✅ Use number ID
       return {
-        questionId: question.id, // ✅ Send as number
-        answer: existingAnswer ? existingAnswer.selectedOption : null, // null for unanswered
+        questionId: question.id, // ✅ Send as string (e.g., "DSA_0")
+        selectedOption: existingAnswer ? existingAnswer.selectedOption : null, // ✅ CORRECT FIELD NAME!
         subcategory: question.subcategory || "Unknown",
       };
     });
+
+    console.log(`[SUBMIT] Frontend sending ${enrichedAnswers.length} answers:`, enrichedAnswers.slice(0, 3));
 
     // Submit to backend
     const response = await axios.post(
@@ -723,9 +725,12 @@ const handleSubmit = async () => {
       { withCredentials: true }
     );
 
+    console.log(`[SUBMIT] Backend response:`, response.data);
+
     if (response.data.success) {
       setQuizCompleted(true);
       toast.success("Quiz submitted successfully!");
+      console.log(`[SUBMIT] Score: ${response.data.totalScore}/${response.data.totalQuestions}`);
 
       // Optional: navigate to results/thank you page
       await exitFullscreen();
@@ -802,6 +807,42 @@ const handleSubmit = async () => {
       // Prevent ESC from exiting fullscreen by blocking
       const handleKeyDown = (e) => {
         if (!quizCompleted) {
+          // ✅ Alt+Tab (Windows / Some Linux)
+          if (e.altKey && e.key === 'Tab') {
+            e.preventDefault();
+            console.warn("[CHEAT] Alt+Tab pressed - blocking");
+            toast.error("🚫 Alt+Tab is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+
+          // ✅ Alt+Escape (Windows alternative to Alt+Tab)
+          if (e.altKey && e.key === 'Escape') {
+            e.preventDefault();
+            console.warn("[CHEAT] Alt+Escape pressed - blocking");
+            toast.error("🚫 Alt+Escape is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+
+          // ✅ Cmd+Tab (macOS)
+          if (e.metaKey && e.key === 'Tab') {
+            e.preventDefault();
+            console.warn("[CHEAT] Cmd+Tab (macOS) pressed - blocking");
+            toast.error("🚫 App switcher is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+
+          // ✅ Cmd+Escape (macOS)
+          if (e.metaKey && e.key === 'Escape') {
+            e.preventDefault();
+            console.warn("[CHEAT] Cmd+Escape (macOS) pressed - blocking");
+            toast.error("🚫 Escape key is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+
           // ESC key - tries to exit fullscreen
           if (e.key === 'Escape') {
             e.preventDefault();
@@ -828,11 +869,29 @@ const handleSubmit = async () => {
             handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
             return;
           }
+
+          // ✅ Cmd+H (macOS hide application)
+          if (e.metaKey && e.key === 'h') {
+            e.preventDefault();
+            console.warn("[CHEAT] Cmd+H (macOS hide) pressed - blocking");
+            toast.error("🚫 Hide application is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
+
+          // ✅ Alt+F4 (Close window)
+          if (e.altKey && e.key === 'F4') {
+            e.preventDefault();
+            console.warn("[CHEAT] Alt+F4 pressed - blocking");
+            toast.error("🚫 Alt+F4 is disabled! You have been blocked from this quiz.");
+            handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
+            return;
+          }
           
-          // Alt+Tab equivalent for Linux/Mac (Cmd+Tab)
+          // Alt+Tab equivalent for Linux/Mac (Ctrl+Tab)
           if (e.ctrlKey && e.key === 'Tab') {
             e.preventDefault();
-            console.warn("[CHEAT] Alt+Tab pressed - blocking");
+            console.warn("[CHEAT] Ctrl+Tab pressed - blocking");
             toast.error("🚫 Tab switching is disabled! You have been blocked from this quiz.");
             handleCheatingDetected(setQuizFrozen, quizId, setSubmitting, setBlockCountdown, setCheatWarningShown, true);
             return;

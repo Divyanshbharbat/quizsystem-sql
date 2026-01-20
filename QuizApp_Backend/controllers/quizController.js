@@ -740,18 +740,36 @@ export const getQuiz = async (req, res) => {
     // Find or create progress
     let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
     if (!progress) {
-      progress = await QuizProgress.create({
-        studentId,
-        quizId,
-        currentQuestionIndex: 0,
-        completed: false,
-        status: false,
-        timeLeft: quizConfig.timeLimit * 60,
-        answers: [],
-      });
-      console.log(`[DEBUG] Created new progress for student ${studentId}`);
+      try {
+        progress = await QuizProgress.create({
+          studentId,
+          quizId,
+          currentQuestionIndex: 0,
+          completed: false,
+          status: false,
+          timeLeft: quizConfig.timeLimit * 60,
+          answers: [],
+        });
+        console.log(`[DEBUG] Created new progress for student ${studentId}`);
+      } catch (createErr) {
+        // If it fails due to duplicate, fetch the existing record
+        if (createErr.name === 'SequelizeUniqueConstraintError') {
+          console.log(`[DEBUG] Progress already exists, fetching existing record for student ${studentId}`);
+          progress = await QuizProgress.findOne({ where: { studentId, quizId } });
+          if (!progress) {
+            throw new Error(`[CRITICAL] Failed to fetch existing progress for student ${studentId}`);
+          }
+        } else {
+          throw createErr;
+        }
+      }
     } else {
       console.log(`[DEBUG] Existing progress found:`, progress.answers);
+    }
+
+    // Safety check
+    if (!progress) {
+      return res.status(500).json({ success: false, message: "Failed to initialize quiz progress" });
     }
 
     const savedAnswers = progress.answers || [];
@@ -845,6 +863,15 @@ export const getQuiz = async (req, res) => {
       });
 
       console.log(`[DEBUG] Final questions for student in "${selection.subcategory}": ${questionsForStudent.length}`);
+      
+      // 🔴 LOG WHAT WE'RE SENDING TO FRONTEND
+      console.log(`[DEBUG] Sending ${selection.subcategory} questions to student ${studentId}:`);
+      questionsForStudent.forEach((q, idx) => {
+        console.log(`[DEBUG]   Q${idx} (ID: ${q.id}): "${q.question}"`);
+        console.log(`[DEBUG]     Options: ${JSON.stringify(q.options)}`);
+        console.log(`[DEBUG]     Correct Answer: "${q.answer}"`);
+        console.log(`[DEBUG]     Student's saved answer: "${q.selectedOption}"`);
+      });
 
       selectionsWithQuestions.push({
         subcategory: selection.subcategory,
@@ -854,6 +881,23 @@ export const getQuiz = async (req, res) => {
 
     console.log(`[DEBUG] ========================================`);
     console.log(`[DEBUG] Total selections with questions: ${selectionsWithQuestions.length}`);
+
+    // 🔴 Store the questionMap in progress for consistent scoring
+    const questionMapForStorage = {};
+    selectionsWithQuestions.forEach(selection => {
+      selection.questions.forEach(q => {
+        questionMapForStorage[q.id] = {
+          question: q.question,
+          options: q.options,
+          answer: q.answer
+        };
+      });
+    });
+
+    // Update progress with the questionMap
+    progress.questionMap = questionMapForStorage;
+    await progress.save();
+    console.log(`[DEBUG] Stored questionMap with ${Object.keys(questionMapForStorage).length} questions in QuizProgress`);
 
     return res.json({
       success: true,

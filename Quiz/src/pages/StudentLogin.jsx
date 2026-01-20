@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.jpg";
 import axios from "axios";
+import toast, { Toaster } from "react-hot-toast";
 
 const StudentLogin = () => {
   const [uid, setUid] = useState("");
@@ -9,13 +10,36 @@ const StudentLogin = () => {
   const [quizId, setQuizId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [blockedCountdown, setBlockedCountdown] = useState(0);
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const navigate = useNavigate();
+
+  // Handle countdown for blocked student
+  useEffect(() => {
+    if (!isBlocked || blockedCountdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setBlockedCountdown(prev => {
+        const newValue = prev - 1;
+        if (newValue <= 0) {
+          setIsBlocked(false);
+          setError("Block expired. Please try logging in again.");
+          clearInterval(timer);
+          return 0;
+        }
+        return newValue;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isBlocked, blockedCountdown]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setIsBlocked(false);
 
     try {
       const response = await axios.post(
@@ -25,16 +49,67 @@ const StudentLogin = () => {
       );
 console.log(response.data);
       if (response.data.success) {
+        // ✅ Check if student is blocked
+        if (response.data.data.blocked && response.data.data.remainingSeconds > 0) {
+          setIsBlocked(true);
+          setBlockedCountdown(response.data.data.remainingSeconds);
+          const expiresAt = response.data.data.expiresAt;
+          
+          // Store block info in window for Quiz component later
+          window._studentBlockInfo = {
+            blocked: true,
+            remainingSeconds: response.data.data.remainingSeconds,
+            expiresAt: expiresAt
+          };
+          
+          setError(`You are blocked from this quiz. Please wait ${response.data.data.remainingSeconds} seconds before retrying.`);
+          toast.error(`Block remaining: ${response.data.data.remainingSeconds}s`);
+          return;
+        }
+
         localStorage.setItem(
           "studentDetails",
           JSON.stringify(response.data.data)
         );
         navigate(`/quiz/${response.data.data.quizId}`);
       } else {
-        setError(response.data.message);
+        // ✅ Handle blocked status in error response
+        if (response.data.data?.blocked && response.data.data?.remainingSeconds > 0) {
+          setIsBlocked(true);
+          setBlockedCountdown(response.data.data.remainingSeconds);
+          const expiresAt = response.data.data.expiresAt;
+          
+          window._studentBlockInfo = {
+            blocked: true,
+            remainingSeconds: response.data.data.remainingSeconds,
+            expiresAt: expiresAt
+          };
+          
+          setError(response.data.message || `Blocked. Retry in ${response.data.data.remainingSeconds}s`);
+          toast.error(`Block remaining: ${response.data.data.remainingSeconds}s`);
+        } else {
+          setError(response.data.message);
+        }
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Server error");
+      // ✅ Handle blocked status in error response
+      const blockData = err.response?.data?.data;
+      if (err.response?.status === 403 && blockData?.blocked && blockData?.remainingSeconds > 0) {
+        setIsBlocked(true);
+        setBlockedCountdown(blockData.remainingSeconds);
+        const expiresAt = blockData.expiresAt;
+        
+        window._studentBlockInfo = {
+          blocked: true,
+          remainingSeconds: blockData.remainingSeconds,
+          expiresAt: expiresAt
+        };
+        
+        setError(err.response?.data?.message || `Blocked. Retry in ${blockData.remainingSeconds}s`);
+        toast.error(`Block remaining: ${blockData.remainingSeconds}s`);
+      } else {
+        setError(err.response?.data?.message || "Server error");
+      }
     } finally {
       setLoading(false);
     }
@@ -42,6 +117,7 @@ console.log(response.data);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Toaster />
       {/* Header */}
       <header className="text-center py-2">
          <div className="">
@@ -62,6 +138,21 @@ console.log(response.data);
               Examinee Login
             </h2>
 
+            {/* ✅ Block Status Display */}
+            {isBlocked && (
+              <div className="mb-6 p-4 bg-red-100 border-l-4 border-red-600 rounded">
+                <p className="text-red-700 font-semibold">
+                  🚫 You are currently blocked
+                </p>
+                <p className="text-red-600 text-sm mt-2">
+                  Time remaining: <span className="font-bold text-lg">{blockedCountdown}s</span>
+                </p>
+                <p className="text-red-600 text-xs mt-1">
+                  Please wait before attempting to login again.
+                </p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* UID */}
               <div>
@@ -74,7 +165,8 @@ console.log(response.data);
                   onChange={(e) => setUid(e.target.value)}
                   placeholder="Enter UID"
                   required
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  disabled={isBlocked}
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -89,7 +181,8 @@ console.log(response.data);
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter Password"
                   required
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  disabled={isBlocked}
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -104,20 +197,27 @@ console.log(response.data);
                   onChange={(e) => setQuizId(e.target.value)}
                   placeholder="Enter Quiz ID"
                   required
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  disabled={isBlocked}
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
                 />
               </div>
 
               {error && (
-                <p className="text-red-600 text-sm text-center">{error}</p>
+                <p className={`text-sm text-center ${isBlocked ? 'text-orange-600 font-semibold' : 'text-red-600'}`}>
+                  {error}
+                </p>
               )}
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3 rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition font-semibold"
+                disabled={loading || isBlocked}
+                className={`w-full py-3 rounded-lg text-white transition font-semibold ${
+                  isBlocked
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                {loading ? "Logging in..." : "Login"}
+                {loading ? "Logging in..." : isBlocked ? `Wait ${blockedCountdown}s...` : "Login"}
               </button>
             </form>
           </div>

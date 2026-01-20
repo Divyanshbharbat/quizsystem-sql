@@ -3,9 +3,9 @@ import Student from "../models/Student.js";
 
 export const isAuthenticated = async (req, res, next) => {
   try {
-    let token;
+    let token = null;
 
-    // 1️⃣ Check Authorization header
+    // 1️⃣ Read token from Authorization header
     if (
       req.headers.authorization &&
       req.headers.authorization.startsWith("Bearer ")
@@ -13,35 +13,54 @@ export const isAuthenticated = async (req, res, next) => {
       token = req.headers.authorization.split(" ")[1];
     }
 
-    // 2️⃣ Fallback to cookie
+    // 2️⃣ Fallback to cookie (optional)
     if (!token && req.cookies?.studenttoken) {
       token = req.cookies.studenttoken;
     }
 
+    // 3️⃣ Token missing
     if (!token) {
-      return res.status(401).json({ message: "No token provided" });
+      return res.status(401).json({
+        success: false,
+        message: "Authentication token missing",
+      });
     }
 
-    // 3️⃣ Verify token
+    // 4️⃣ Verify token
     const decoded = jwt.verify(
       token,
       process.env.JWT_SECRET || "divyansh"
     );
 
-    // 4️⃣ Find student by PRIMARY KEY (MySQL safe)
+    // ❗ IMPORTANT: decoded.id MUST be students.id (AUTO INCREMENT PK)
+    if (!decoded?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid token payload",
+      });
+    }
+
+    // 5️⃣ Fetch student using PRIMARY KEY
     const student = await Student.findByPk(decoded.id);
 
     if (!student) {
-      return res.status(401).json({ message: "Student not found" });
+      return res.status(401).json({
+        success: false,
+        message: "Student not found",
+      });
     }
 
-    // 5️⃣ Attach student to request (Mongo + MySQL compatibility)
-    req.student = student;
-    req.user = { id: student.id };
+    // 6️⃣ Attach to request (THIS is what controllers should use)
+    req.student = student;              // full student object
+    req.user = { id: student.id };      // SAFE numeric ID only
 
     next();
   } catch (error) {
     console.error("Auth error:", error.message);
-    return res.status(401).json({ message: "Invalid or expired token" });
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired token",
+    });
   }
 };

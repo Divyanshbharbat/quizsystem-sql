@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./components/AuthContext";
 import Sidebar from "./components/Sidebar";
 import StudentLogin from "./pages/StudentLogin";
-// Pages
+import HalfCircleGauge from "./components/HalfCircleGauge";
 import Error from "./Error";
 import Home from "./pages/Home";
 import Login from "./pages/Login";

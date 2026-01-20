@@ -29,15 +29,14 @@ export const registerStudent = async (req, res) => {
       where: { [Op.or]: [{ email }, { studentId }] },
     });
 
-    if (studentExists)
+    if (studentExists) {
       return res.status(400).json({
         success: false,
         message: "Student already registered with this email or studentId",
       });
+    }
 
-    // Hash default password as studentId
-    const hashedPassword = await bcrypt.hash(studentId, 10);
-
+    // ✅ Send PLAIN password
     const student = await Student.create({
       name,
       studentId,
@@ -45,7 +44,7 @@ export const registerStudent = async (req, res) => {
       year,
       email,
       phone,
-      password: hashedPassword,
+      password: studentId, // ✔ plain text
     });
 
     const studentData = student.toJSON();
@@ -58,9 +57,14 @@ export const registerStudent = async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error", error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message,
+    });
   }
 };
+
 
 // ---------------- LOGIN STUDENT ----------------
 export const loginStudent = async (req, res) => {
@@ -102,9 +106,42 @@ console.log("Fetched quiz:", quiz);
       return res.status(404).json({ success: false, message: "Quiz not found" });
     }
 
+    // ✅ CHECK IF STUDENT IS BLOCKED
+    const now = new Date();
+    let blocked = Array.isArray(quiz.blocked) ? quiz.blocked : [];
+    
+    // Remove expired blocks
+    blocked = blocked.filter(b => b.expiresAt && new Date(b.expiresAt) > now);
+    
+    const existingBlock = blocked.find(b => String(b.studentId) === String(student.id));
+    if (existingBlock) {
+      const remainingSeconds = Math.ceil(
+        (new Date(existingBlock.expiresAt) - now) / 1000
+      );
+      const expiresAt = new Date(existingBlock.expiresAt).getTime();
+      
+      console.log(`[LOGIN] Student ${student.id} is blocked for ${remainingSeconds} more seconds`);
+
+      return res.status(403).json({
+        success: false,
+        message: "You are blocked from this quiz. Please wait before retrying.",
+        data: {
+          quizId,
+          blocked: true,
+          remainingSeconds,
+          expiresAt,
+          student: {
+            id: student.id,
+            name: student.name,
+            studentId: student.studentId,
+          },
+        },
+      });
+    }
+
     // ------------------ Check if student already completed ------------------
     const alreadyCompleted = (quiz.completed || []).some(
-      (entry) => entry.student === student.id
+      (entry) => String(entry.studentId) === String(student.id)
     );
 
     if (alreadyCompleted) {
@@ -142,6 +179,8 @@ console.log("Fetched quiz:", quiz);
         },
         quizId,
         completed: false,
+        blocked: false,
+        remainingSeconds: 0,
         faculty: quiz.faculty, // include faculty info if needed
       },
     });

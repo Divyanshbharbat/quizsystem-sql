@@ -23,7 +23,7 @@ const Seeresult = () => {
 
       if (response.data.success) {
         localStorage.setItem("studentDetails", JSON.stringify(response.data.data));
-        navigate(`/result/${response.data.data.uid}`);
+        navigate(`/result/${response.data.data.studentId}`);
       } else {
         setError(response.data.message);
       }
