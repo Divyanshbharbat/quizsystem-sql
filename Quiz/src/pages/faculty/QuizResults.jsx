@@ -164,7 +164,7 @@ const QuizResults = () => {
             </tr>
           </thead>
           <tbody>
-            {submissions.map((sub, sIdx) => {
+            {[...submissions].reverse().map((sub, sIdx) => {
               const totalScore = questions.reduce((sum, q) => {
                 const answer = sub.answers.find((a) => a.questionId === q._id);
                 return sum + (answer?.score || 0);

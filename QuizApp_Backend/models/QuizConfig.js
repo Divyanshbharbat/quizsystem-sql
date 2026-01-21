@@ -4,6 +4,13 @@ import sequelize from "../config/db.js";
 const QuizConfig = sequelize.define(
   "QuizConfig",
   {
+    // ================= PRIMARY KEY =================
+    id: {
+      type: DataTypes.STRING,
+      primaryKey: true,
+      allowNull: false
+    },
+
     // ================= BASIC INFO =================
     title: {
       type: DataTypes.STRING,

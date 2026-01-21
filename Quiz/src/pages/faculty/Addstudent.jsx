@@ -463,10 +463,10 @@ useEffect(() => {
                     className="border p-2 rounded-md w-full bg-white"
                   >
                     <option value="">Select Year</option>
-                    <option value="1">1st Year</option>
-                    <option value="2">2nd Year</option>
-                    <option value="3">3rd Year</option>
-                    <option value="4">4th Year</option>
+                    <option value="1">1st Year (Odd Semester)</option>
+                    <option value="2">2nd Year (Even Semester)</option>
+                    <option value="3">3rd Year (Odd Semester)</option>
+                    <option value="4">4th Year (Even Semester)</option>
                   </select>
 
                   <input
@@ -567,10 +567,10 @@ useEffect(() => {
                       className="border p-2 rounded-md w-full bg-white"
                     >
                       <option value="">Select Year</option>
-                      <option value="1">1st Year</option>
-                      <option value="2">2nd Year</option>
-                      <option value="3">3rd Year</option>
-                      <option value="4">4th Year</option>
+                      <option value="1">1st Year (Odd Semester)</option>
+                      <option value="2">2nd Year (Even Semester)</option>
+                      <option value="3">3rd Year (Odd Semester)</option>
+                      <option value="4">4th Year (Even Semester)</option>
                     </select>
 
                     <input

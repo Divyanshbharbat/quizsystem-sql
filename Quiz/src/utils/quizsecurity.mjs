@@ -271,17 +271,26 @@ export const initSecurityListeners = (onCheatDetected) => {
         e.preventDefault();
       } catch {}
 
-      // Inform the caller that a cheating-like action occurred
-      try {
-        onCheatDetected();
-      } catch (err) {
-        console.error("onCheatDetected callback error:", err);
-      }
+      // ✅ Only call onCheatDetected if not already blocked/frozen
+      // During block state, silently prevent the action without showing message
+      const isCurrentlyBlocked = window._quizFrozen || window._blockActive;
+      
+      if (!isCurrentlyBlocked) {
+        // Inform the caller that a cheating-like action occurred
+        try {
+          onCheatDetected();
+        } catch (err) {
+          console.error("onCheatDetected callback error:", err);
+        }
 
-      // Force fullscreen again
-      const el = document.documentElement;
-      if (el.requestFullscreen) el.requestFullscreen();
-      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+        // Force fullscreen again
+        const el = document.documentElement;
+        if (el.requestFullscreen) el.requestFullscreen();
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } else {
+        // During block state: silently prevent without showing toast
+        console.log("[SECURITY] Blocked keyboard action during block state - silent block");
+      }
     }
   };
 

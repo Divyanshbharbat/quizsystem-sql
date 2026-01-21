@@ -177,6 +177,8 @@ const Quiz = () => {
   --------------------- */
   useEffect(() => {
     stateRef.current = { quizFrozen, submitting, quizCompleted };
+    // ✅ Sync quizFrozen to window for security listener to check
+    window._quizFrozen = quizFrozen;
   }, [quizFrozen, submitting, quizCompleted]);
 
   /* ---------------------

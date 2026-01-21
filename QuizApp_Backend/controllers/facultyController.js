@@ -48,29 +48,42 @@ export const registerFaculty = async (req, res) => {
       return res.status(400).json({ success: false, message: "Semester must be 'even' or 'odd'" });
     }
 
+    // Check if email already exists
+    const existingEmail = await Faculty.findOne({
+      where: { email: email.trim().toLowerCase() }
+    });
+    if (existingEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "duplicate_email"
+      });
+    }
+
+    // Check if phone already exists
+    const existingPhone = await Faculty.findOne({
+      where: { phone: phone.trim() }
+    });
+    if (existingPhone) {
+      return res.status(400).json({
+        success: false,
+        message: "duplicate_phone"
+      });
+    }
+
     // Hash phone as password
     const hashedPassword = await bcrypt.hash(phone, 10);
 
-    const [faculty, created] = await Faculty.findOrCreate({
-      where: { email: email.trim().toLowerCase(), session: session.trim(), semester: sem },
-      defaults: {
-        name: name.trim(),
-        department: department.trim(),
-        phone: phone.trim(),
-        password: hashedPassword,
-        isAdmin: isAdmin || false,
-        subjects: Array.isArray(subjects) ? subjects : [],
-        session: session.trim(),
-        semester: sem,
-      },
+    const faculty = await Faculty.create({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      department: department.trim(),
+      phone: phone.trim(),
+      password: hashedPassword,
+      isAdmin: isAdmin || false,
+      subjects: Array.isArray(subjects) ? subjects : [],
+      session: session.trim(),
+      semester: sem,
     });
-
-    if (!created) {
-      return res.status(400).json({
-        success: false,
-        message: `Faculty with email '${email}' already exists for session '${session}' and semester '${semester}'`,
-      });
-    }
 
     return res.json({
       success: true,
@@ -98,16 +111,22 @@ export const loginFaculty = async (req, res) => {
     }
 
     const user = await Faculty.findOne({
-      where: { email: email.trim().toLowerCase(), session: session.trim(), semester: sem },
+      where: { email: email.trim().toLowerCase() }
     });
 
+    // Check if user exists and session/semester match
     if (!user) {
-      return res.status(401).json({ success: false, message: "Invalid credentials for this session/semester" });
+      return res.status(401).json({ success: false, message: "email_not_found" });
     }
 
+    if (user.session !== session.trim() || user.semester !== sem) {
+      return res.status(401).json({ success: false, message: "session_mismatch" });
+    }
+
+    // Validate password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ success: false, message: "Invalid credentials" });
+      return res.status(401).json({ success: false, message: "wrong_password" });
     }
 
     const token = generateToken(user.id);
@@ -196,6 +215,15 @@ export const updateFaculty = async (req, res) => {
 
     await faculty.update({ name, email, department, subjects, isAdmin, session, semester });
 
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
     res.status(200).json({ success: true, data: faculty });
   } catch (err) {
     console.error(err);
@@ -210,6 +238,15 @@ export const deleteFaculty = async (req, res) => {
     const deleted = await Faculty.destroy({ where: { id } });
 
     if (!deleted) return res.status(404).json({ success: false, message: "Faculty not found" });
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
 
     res.status(200).json({ success: true, message: "Faculty deleted successfully" });
   } catch (err) {
@@ -301,3 +338,53 @@ export const getBlockedStudents = async (req, res) => {
 //     res.status(500).json({ success: false, message: "Server Error" });
 //   }
 // };
+// ============ ADMIN ONLY: GET FACULTY WITH PASSWORD ============
+export const getFacultyWithPassword = async (req, res) => {
+  try {
+    const faculty = await Faculty.findByPk(req.params.facultyId);
+    if (!faculty) {
+      return res.status(404).json({ success: false, message: "Faculty not found" });
+    }
+
+    res.json({ success: true, data: faculty });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+// ============ ADMIN ONLY: UPDATE FACULTY PASSWORD ============
+export const updateFacultyPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password || password.trim() === "") {
+      return res.status(400).json({ success: false, message: "Password is required" });
+    }
+
+    const faculty = await Faculty.findByPk(req.params.facultyId);
+    if (!faculty) {
+      return res.status(404).json({ success: false, message: "Faculty not found" });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await faculty.update({ password: hashedPassword });
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
+    const data = faculty.toJSON();
+    delete data.password;
+    res.json({ success: true, message: "Faculty password updated successfully", data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};

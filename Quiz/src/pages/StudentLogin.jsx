@@ -13,6 +13,7 @@ const StudentLogin = () => {
   const [isBlocked, setIsBlocked] = useState(false);
   const [isAlreadyCompleted, setIsAlreadyCompleted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
 
@@ -120,9 +121,21 @@ const StudentLogin = () => {
         return;
       }
       
-      // Regular error
-      setError(errorData?.message || "Invalid credentials");
-      toast.error(errorData?.message || "Login failed");
+      // Show specific error messages
+      const msg = errorData?.message || "";
+      if (msg.includes("Invalid password") || msg.includes("password")) {
+        setError("Wrong password");
+        toast.error("Wrong password");
+      } else if (msg.includes("not found") || msg.includes("No student")) {
+        setError("Wrong student ID");
+        toast.error("Wrong student ID");
+      } else if (msg.includes("quiz") || msg.includes("Quiz")) {
+        setError("Wrong quiz ID");
+        toast.error("Wrong quiz ID");
+      } else {
+        setError(msg || "Login failed");
+        toast.error(msg || "Login failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -179,14 +192,32 @@ const StudentLogin = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password
                 </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter Password"
-                  required
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter Password"
+                    required
+                    className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-gray-600 text-lg"
+                  >
+                    {showPassword ? "👁️" : "👁️‍🗨️"}
+                  </button>
+                </div>
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
 
               {/* Quiz ID */}

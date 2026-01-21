@@ -6,6 +6,7 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [session, setSession] = useState(""); // New state
   const [semester, setSemester] = useState("odd"); // Default to "odd"
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -42,11 +43,20 @@ console.log('divyansh'+`${import.meta.VITE_APP}`)
         localStorage.setItem("facultyDetails", JSON.stringify(facultyDetails));
        navigate("/create");
       } else {
-        alert(result.message || "Invalid Username or Password for this session/semester");
+        const msg = result.message || "";
+        if (msg === "wrong_password") {
+          toast.error("Password is wrong");
+        } else if (msg === "email_not_found") {
+          toast.error("Email not found");
+        } else if (msg === "session_mismatch") {
+          toast.error("Session is working but wrong session/semester combination");
+        } else {
+          toast.error(msg || "Login failed");
+        }
       }
     } catch (error) {
       console.error("An error occurred:", error);
-      alert(`An error occurred: ${error.message || "Please try again later."}`);
+      toast.error(`An error occurred: ${error.message || "Please try again later."}`);
     }
   };
 
@@ -97,15 +107,33 @@ console.log('divyansh'+`${import.meta.VITE_APP}`)
                 >
                   Password
                 </label>
-                <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter your password"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full p-3 border border-blue-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-gray-600 text-lg"
+                  >
+                    {showPassword ? "👁️" : "👁️‍🗨️"}
+                  </button>
+                </div>
+                <div className="mt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-sm text-blue-600 hover:text-blue-700 hover:underline transition"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
               </div>
 
               <div>

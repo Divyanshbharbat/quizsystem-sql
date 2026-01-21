@@ -201,13 +201,13 @@ const CreateQuiz2 = () => {
 
   const availableDepartments = [
     ...new Set(
-      quizConfigsForTable.map((q) => q.createdBy?.department).filter(Boolean)
+      quizConfigsForTable.map((q) => q.createdByDetails?.department).filter(Boolean)
     ),
   ];
 
   const filteredTableData = quizConfigsForTable.filter((q) => {
     const dateMatch = !selectedDate || new Date(q.createdAt).toISOString().split("T")[0] === selectedDate;
-    const deptMatch = !selectedDepartment || q.createdBy?.department === selectedDepartment;
+    const deptMatch = !selectedDepartment || q.createdByDetails?.department === selectedDepartment;
     return dateMatch && deptMatch;
   });
 
@@ -218,7 +218,7 @@ const CreateQuiz2 = () => {
         title: item.title,
         category: item.category,
         createdAt: item.createdAt,
-        createdBy: item.createdBy,
+        createdBy: item.createdByDetails,
         subcategories: [],
       };
     }

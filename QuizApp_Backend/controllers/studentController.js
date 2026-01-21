@@ -341,7 +341,10 @@ export const getYearDeptStudents = async (req, res) => {
     if (year) where.year = year;
     if (department) where.department = department;
 
-    const students = await Student.findAll({ where });
+    const students = await Student.findAll({ 
+      where,
+      attributes: { exclude: ["password"] }
+    });
 
     if (students.length === 0)
       return res.json({ success: false, message: "No students found" });
@@ -395,6 +398,8 @@ export const uploadStudentsCSV = async (req, res) => {
 export const updateStudent = async (req, res) => {
   try {
     const { name, studentId, department, year, email, phone } = req.body;
+    // ✅ Explicitly exclude password - never allow password update through this endpoint
+    // Password must be changed through dedicated forgot-password/reset-password flow
 
     const student = await Student.findByPk(req.params.studentId);
     if (!student) return res.status(404).json({ success: false, message: "Student not found" });
@@ -406,7 +411,17 @@ export const updateStudent = async (req, res) => {
       year: year || student.year,
       email: email || student.email,
       phone: phone || student.phone,
+      // ✅ Password is NOT updated here
     });
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
 
     const data = student.toJSON();
     delete data.password;
@@ -423,7 +438,112 @@ export const deleteStudent = async (req, res) => {
     const deleted = await Student.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ success: false, message: "Student not found" });
 
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
     res.json({ success: true, message: "Student deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+// ============ ADMIN ONLY: UPDATE STUDENT PASSWORD ============
+export const updateStudentPassword = async (req, res) => {
+  try {
+    const { password } = req.body;
+    
+    if (!password || password.trim() === "") {
+      return res.status(400).json({ success: false, message: "Password is required" });
+    }
+
+    const student = await Student.findByPk(req.params.studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await student.update({ password: hashedPassword });
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
+    const data = student.toJSON();
+    delete data.password;
+    res.json({ success: true, message: "Student password updated successfully", data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+// ============ ADMIN ONLY: GET STUDENT WITH PASSWORD ============
+export const getStudentWithPassword = async (req, res) => {
+  try {
+    const student = await Student.findByPk(req.params.studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    res.json({ success: true, data: student });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+// ============ STUDENT SELF-SERVICE: CHANGE OWN PASSWORD ============
+export const changeStudentPassword = async (req, res) => {
+  try {
+    const { studentId, oldPassword, newPassword } = req.body;
+    
+    if (!studentId || !oldPassword || !newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Student ID, old password, and new password are required" 
+      });
+    }
+
+    const student = await Student.findByPk(studentId);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    // Verify old password
+    const isPasswordValid = await bcrypt.compare(oldPassword, student.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, message: "wrong_password" });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await student.update({ password: hashedPassword });
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
+    const data = student.toJSON();
+    delete data.password;
+    res.json({ success: true, message: "Password changed successfully", data });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });
@@ -580,6 +700,91 @@ export const getStudentSubmissions = async (req, res) => {
     });
 
     res.json({ success: true, count: submissions.length, submissions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
+  }
+};
+
+// ============ BULK PROMOTE STUDENTS TO NEXT YEAR ============
+export const promoteStudentsToNextYear = async (req, res) => {
+  try {
+    const { currentYear, department, excludeStudentIds } = req.body;
+
+    if (!currentYear || !department) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Current year and department are required" 
+      });
+    }
+
+    // Find students in current year and department (excluding failed/exempted ones)
+    const studentsToPromote = await Student.findAll({
+      where: {
+        year: currentYear,
+        department: department,
+        id: {
+          [Op.notIn]: excludeStudentIds || []
+        }
+      }
+    });
+
+    if (studentsToPromote.length === 0) {
+      return res.json({ 
+        success: true, 
+        message: "No students to promote",
+        promoted: 0,
+        data: []
+      });
+    }
+
+    // Update all students: increment year and update studentId with new pattern
+    const promotedStudents = [];
+    
+    for (const student of studentsToPromote) {
+      // Extract year from studentId and increment it
+      // Example: 23CS001 -> 24CS002 (assuming year in first 2 digits, dept in next 2, then roll)
+      const rollMatch = student.studentId.match(/(\d{2})([A-Z]+)(\d+)/);
+      
+      let newStudentId = student.studentId;
+      if (rollMatch) {
+        const year = parseInt(rollMatch[1]) + 1;
+        const dept = rollMatch[2];
+        const roll = parseInt(rollMatch[3]);
+        // Keep the same roll number, just increment year
+        newStudentId = `${year.toString().padStart(2, '0')}${dept}${roll.toString().padStart(3, '0')}`;
+      }
+
+      // Update student
+      await student.update({
+        year: currentYear + 1,
+        studentId: newStudentId,
+        password: newStudentId // Reset password to new studentId
+      });
+
+      promotedStudents.push({
+        id: student.id,
+        oldStudentId: student.studentId,
+        newStudentId: newStudentId,
+        name: student.name
+      });
+    }
+
+    // ✅ Clear all workers/background tasks
+    if (global.gc) global.gc();
+    if (global._workers) {
+      Object.values(global._workers).forEach(w => {
+        try { w.terminate?.(); } catch (e) {}
+      });
+      global._workers = {};
+    }
+
+    res.json({ 
+      success: true, 
+      message: `${promotedStudents.length} students promoted to next year`,
+      promoted: promotedStudents.length,
+      data: promotedStudents
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });

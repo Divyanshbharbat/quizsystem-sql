@@ -13,7 +13,11 @@ import {
   getStudentSubmissions,
   getStudentByName,
   resultLoginStudent,
-  forgotPassword,resetPassword,verifyOtp
+  forgotPassword,resetPassword,verifyOtp,
+  updateStudentPassword,
+  getStudentWithPassword,
+  changeStudentPassword,
+  promoteStudentsToNextYear
 } from '../controllers/studentController.js';
 import Student from '../models/Student.js';
 import { protect } from '../middlewares/authMiddleware.js'; // protect routes if needed
@@ -28,6 +32,8 @@ router.post('/resultlogin', resultLoginStudent);
 router.post('/forgot-password', forgotPassword);
 router.post("/reset-password/:token", resetPassword);
 router.post("/verify-otp", verifyOtp);
+router.post("/change-password", changeStudentPassword);
+
 // Student profile & info routes
 router.get('/me', getStudentMe);
 router.get('/studentId/:studentId', getStudentByStudentID);
@@ -44,6 +50,13 @@ router.post('/upload-csv', uploadStudentsCSV);
 router.put('/:studentId', updateStudent);
 router.delete('/:id', deleteStudent);
 router.delete('/delete/:studentId', deleteStudent);
+
+// ADMIN ONLY: Update password and get student with password
+router.put('/admin/password/:studentId', updateStudentPassword);
+router.get('/admin/password/:studentId', getStudentWithPassword);
+
+// ADMIN ONLY: Bulk promote students to next year
+router.post('/admin/promote-year', promoteStudentsToNextYear);
 
 // Get quizzes and submissions for a student
 router.get('/:studentId/quizzes', getStudentQuizzes);

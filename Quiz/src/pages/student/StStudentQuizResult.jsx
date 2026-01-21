@@ -107,52 +107,53 @@ const StStudentQuizResult = () => {
         </button>
       </div>
 
-      <div className="table-responsive">
-        <table className="table table-bordered table-hover">
-          <thead className="table-dark">
-            <tr>
-              <th>#</th>
-              <th>Student</th>
-              <th>Roll No</th>
-              {subcategories.map((sub, i) => (
-                <th key={i}>{sub}</th>
-              ))}
-              <th>Total Score</th>
-              <th>%</th>
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((student, idx) => {
-              const totalQuestions = student.subcategoryScores.reduce(
-                (acc, s) => acc + s.totalQuestions,
-                0
-              );
-              const totalScore = student.totalScore;
-              const percentage = Math.round((totalScore / totalQuestions) * 100);
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {results.map((student, idx) => {
+          const totalQuestions = student.subcategoryScores.reduce(
+            (acc, s) => acc + s.totalQuestions,
+            0
+          );
+          const totalScore = student.totalScore;
+          const percentage = Math.round((totalScore / totalQuestions) * 100);
 
-              return (
-                <tr 
-                  key={student.studentId}
-                  onClick={() => setSelectedStudent({ ...student, percentage })}
-                  style={{ cursor: "pointer" }}
-                  className="hover:bg-light"
-                >
-                  <td>{idx + 1}</td>
-                  <td>{student.name}</td>
-                  <td>{student.rollNo}</td>
-                  {subcategories.map((sub, i) => {
-                    const subObj = student.subcategoryScores.find(
-                      (s) => s.subcategory === sub
-                    );
-                    return <td key={i}>{subObj ? subObj.score : 0}</td>;
-                  })}
-                  <td>{totalScore}</td>
-                  <td>{percentage}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+          return (
+            <div
+              key={student.studentId}
+              onClick={() => setSelectedStudent({ ...student, percentage })}
+              style={{
+                cursor: "pointer",
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                padding: "16px",
+                backgroundColor: "white",
+                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+                transition: "all 0.3s ease",
+                transform: "scale(1)",
+                minHeight: "80px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.02)";
+                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
+              }}
+            >
+              <div style={{ textAlign: "center", width: "100%" }}>
+                <h3 style={{ margin: "0", fontSize: "16px", fontWeight: "bold", color: "#333" }}>
+                  {student.name}
+                </h3>
+                <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#999" }}>
+                  Click to view details
+                </p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* ======================= DETAIL MODAL ======================= */}

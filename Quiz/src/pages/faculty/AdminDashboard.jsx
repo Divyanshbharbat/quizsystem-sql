@@ -31,6 +31,40 @@ const AdminDashboard = () => {
 
   const [csvFaculties, setCsvFaculties] = useState([]);
 
+  // FACULTY EDIT & PASSWORD STATE
+  const [editingFaculty, setEditingFaculty] = useState(null);
+  const [facultyPasswordModal, setFacultyPasswordModal] = useState(false);
+  const [facultyOldPassword, setFacultyOldPassword] = useState("");
+  const [facultyNewPassword, setFacultyNewPassword] = useState("");
+  const [showOldPassword, setShowOldPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
+  // STUDENT MANAGEMENT STATE
+  const [students, setStudents] = useState([]);
+  const [searchStudentTerm, setSearchStudentTerm] = useState("");
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [showStudentDetails, setShowStudentDetails] = useState(false);
+  const [studentPasswordModal, setStudentPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showOldPass, setShowOldPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+
+  // STUDENT YEAR PROMOTION STATE
+  const [promoteModal, setPromoteModal] = useState(false);
+  const [selectedYearForPromotion, setSelectedYearForPromotion] = useState("");
+  const [excludeStudentsList, setExcludeStudentsList] = useState([]);
+  const [promoting, setPomoting] = useState(false);
+
+  const [formStudent, setFormStudent] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    year: "",
+    department: "",
+  });
+
   const formRef = useRef(); 
   const formScrollRef = useRef();  // SCROLL TARGET
 
@@ -74,6 +108,174 @@ const AdminDashboard = () => {
   useEffect(() => {
     if (adminDept) fetchFaculties();
   }, [adminDept]);
+
+  // ========== STUDENT MANAGEMENT FUNCTIONS ==========
+  const fetchStudents = async () => {
+    try {
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/student?department=${adminDept}`);
+      if (res.data.success) {
+        setStudents(res.data.data || []);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error fetching students");
+    }
+  };
+
+  useEffect(() => {
+    if (adminDept) fetchStudents();
+  }, [adminDept]);
+
+  // Filter students
+  useEffect(() => {
+    let filtered = students;
+    if (searchStudentTerm.trim()) {
+      filtered = filtered.filter(
+        (s) =>
+          s.name.toLowerCase().includes(searchStudentTerm.toLowerCase()) ||
+          s.studentId.toLowerCase().includes(searchStudentTerm.toLowerCase()) ||
+          s.email.toLowerCase().includes(searchStudentTerm.toLowerCase())
+      );
+    }
+    setFilteredStudents(filtered);
+  }, [searchStudentTerm, students]);
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.put(
+        `${import.meta.env.VITE_APP}/api/student/${selectedStudent.id}`,
+        formStudent
+      );
+      if (res.data.success) {
+        toast.success("Student updated successfully");
+        setSelectedStudent(null);
+        fetchStudents();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating student");
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!newPassword.trim()) {
+      toast.error("Password cannot be empty");
+      return;
+    }
+    try {
+      const res = await axios.put(
+        `${import.meta.env.VITE_APP}/api/student/admin/password/${selectedStudent.id}`,
+        { password: newPassword }
+      );
+      if (res.data.success) {
+        toast.success("Password updated successfully");
+        setStudentPasswordModal(false);
+        setNewPassword("");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating password");
+    }
+  };
+
+  const handleDeleteStudent = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this student?")) return;
+    try {
+      const res = await axios.delete(`${import.meta.env.VITE_APP}/api/student/${id}`);
+      if (res.data.success) {
+        toast.success("Student deleted successfully");
+        setSelectedStudent(null);
+        fetchStudents();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error deleting student");
+    }
+  };
+
+  // ========== END STUDENT MANAGEMENT FUNCTIONS ==========
+
+  // ========== FACULTY EDIT & PASSWORD MANAGEMENT FUNCTIONS ==========
+  const handleEditFaculty = async (faculty) => {
+    setEditingFaculty(faculty);
+    setFormFaculty({
+      name: faculty.name,
+      email: faculty.email,
+      department: faculty.department,
+      phone: faculty.phone,
+      isAdmin: faculty.isAdmin,
+      subjects: faculty.subjects || [""],
+      session: faculty.session,
+      semester: faculty.semester,
+    });
+  };
+
+  const handleSaveFacultyEdit = async (e) => {
+    e.preventDefault();
+    if (!editingFaculty) return;
+
+    try {
+      const res = await axios.put(
+        `${import.meta.env.VITE_APP}/api/faculty/update/${editingFaculty.id}`,
+        formFaculty
+      );
+      if (res.data.success) {
+        toast.success("Faculty updated successfully");
+        setEditingFaculty(null);
+        fetchFaculties();
+      }
+    } catch (err) {
+      console.error(err);
+      const msg = err.response?.data?.message;
+      if (msg === "duplicate_email") {
+        toast.error("Email already exists");
+      } else if (msg === "duplicate_phone") {
+        toast.error("Mobile number already exists");
+      } else {
+        toast.error("Error updating faculty");
+      }
+    }
+  };
+
+  const handleUpdateFacultyPassword = async () => {
+    if (!facultyNewPassword.trim()) {
+      toast.error("Password cannot be empty");
+      return;
+    }
+    try {
+      const res = await axios.put(
+        `${import.meta.env.VITE_APP}/api/faculty/admin/password/${editingFaculty.id}`,
+        { password: facultyNewPassword }
+      );
+      if (res.data.success) {
+        toast.success("Password updated successfully");
+        setFacultyPasswordModal(false);
+        setFacultyNewPassword("");
+        setFacultyOldPassword("");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating password");
+    }
+  };
+
+  const handleDeleteFacultyClick = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this faculty?")) return;
+    try {
+      const res = await axios.delete(`${import.meta.env.VITE_APP}/api/faculty/delete/${id}`);
+      if (res.data.success) {
+        toast.success("Faculty deleted successfully");
+        setEditingFaculty(null);
+        fetchFaculties();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error deleting faculty");
+    }
+  };
+
+  // ========== END FACULTY EDIT & PASSWORD MANAGEMENT FUNCTIONS ==========
 
   // Filtering
   useEffect(() => {
@@ -157,7 +359,14 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error saving faculty.");
+      const message = err.response?.data?.message;
+      if (message === "duplicate_email") {
+        toast.error("Email already exists");
+      } else if (message === "duplicate_phone") {
+        toast.error("Mobile number already exists");
+      } else {
+        toast.error(message || "Error saving faculty");
+      }
     }
   };
 
@@ -286,6 +495,356 @@ const AdminDashboard = () => {
       </div>
     ) : null;
 
+  // ========== STUDENT DETAILS MODAL ==========
+  const StudentDetailsModal = () =>
+    selectedStudent ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[500px]">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Student Details & Edit</h2>
+
+          <form onSubmit={handleUpdateStudent} className="space-y-3">
+            <div>
+              <label className="block text-sm font-semibold mb-1">Name</label>
+              <input
+                type="text"
+                value={formStudent.name}
+                onChange={(e) => setFormStudent({ ...formStudent, name: e.target.value })}
+                className="w-full border p-2 rounded-md"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Email</label>
+              <input
+                type="email"
+                value={formStudent.email}
+                onChange={(e) => setFormStudent({ ...formStudent, email: e.target.value })}
+                className="w-full border p-2 rounded-md"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Phone</label>
+              <input
+                type="text"
+                value={formStudent.phone}
+                onChange={(e) => setFormStudent({ ...formStudent, phone: e.target.value })}
+                className="w-full border p-2 rounded-md"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Year</label>
+              <input
+                type="number"
+                value={formStudent.year}
+                onChange={(e) => setFormStudent({ ...formStudent, year: e.target.value })}
+                className="w-full border p-2 rounded-md"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Department</label>
+              <input
+                type="text"
+                value={formStudent.department}
+                readOnly
+                className="w-full border p-2 rounded-md bg-gray-100"
+              />
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md flex-1"
+              >
+                Update Details
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStudentPasswordModal(true)}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md"
+              >
+                Change Password
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteStudent(selectedStudent.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md"
+              >
+                Delete
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedStudent(null)}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md"
+              >
+                Close
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    ) : null;
+
+  // ========== FACULTY EDIT MODAL ==========
+  const FacultyEditModal = () =>
+    editingFaculty ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] overflow-y-auto">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[550px] my-8">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Edit Faculty</h2>
+
+          <form onSubmit={handleSaveFacultyEdit} className="space-y-3">
+            <div>
+              <label className="block text-sm font-semibold mb-1">Name</label>
+              <input
+                type="text"
+                value={formFaculty.name}
+                onChange={(e) => setFormFaculty({ ...formFaculty, name: e.target.value })}
+                className="w-full border p-2 rounded-md"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Email</label>
+              <input
+                type="email"
+                value={formFaculty.email}
+                onChange={(e) => setFormFaculty({ ...formFaculty, email: e.target.value })}
+                className="w-full border p-2 rounded-md"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Phone</label>
+              <input
+                type="text"
+                value={formFaculty.phone}
+                onChange={(e) => setFormFaculty({ ...formFaculty, phone: e.target.value })}
+                className="w-full border p-2 rounded-md"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Department</label>
+              <input
+                type="text"
+                value={formFaculty.department}
+                readOnly
+                className="w-full border p-2 rounded-md bg-gray-100"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Session</label>
+              <input
+                type="text"
+                value={formFaculty.session}
+                onChange={(e) => setFormFaculty({ ...formFaculty, session: e.target.value })}
+                className="w-full border p-2 rounded-md"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold mb-1">Semester</label>
+              <select
+                value={formFaculty.semester}
+                onChange={(e) => setFormFaculty({ ...formFaculty, semester: e.target.value })}
+                className="w-full border p-2 rounded-md"
+                required
+              >
+                <option value="">Select</option>
+                <option value="even">Even</option>
+                <option value="odd">Odd</option>
+              </select>
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md"
+              >
+                Save Changes
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFacultyPasswordModal(true)}
+                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md"
+              >
+                Change Password
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteFacultyClick(editingFaculty.id)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md"
+              >
+                Delete
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditingFaculty(null)}
+                className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
+              >
+                Close
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    ) : null;
+
+  // ========== FACULTY PASSWORD CHANGE MODAL ==========
+  const FacultyPasswordModal = () =>
+    facultyPasswordModal && editingFaculty ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Password</h2>
+          <p className="mb-4 text-gray-600">Faculty: <strong>{editingFaculty.name}</strong></p>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">Current Password (for reference)</label>
+            <div className="relative">
+              <input
+                type={showOldPassword ? "text" : "password"}
+                placeholder="Current password (read-only)"
+                value={facultyOldPassword}
+                readOnly
+                className="w-full border p-2 rounded-md bg-gray-100 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOldPassword(!showOldPassword)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showOldPassword ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPassword ? "text" : "password"}
+                placeholder="Enter new password"
+                value={facultyNewPassword}
+                onChange={(e) => setFacultyNewPassword(e.target.value)}
+                className="w-full border p-2 rounded-md pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showNewPassword ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleUpdateFacultyPassword}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md"
+            >
+              Update Password
+            </button>
+
+            <button
+              onClick={() => {
+                setFacultyPasswordModal(false);
+                setFacultyNewPassword("");
+                setFacultyOldPassword("");
+              }}
+              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  // ========== STUDENT PASSWORD CHANGE MODAL ==========
+  const StudentPasswordModal = () =>
+    studentPasswordModal && selectedStudent ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Password</h2>
+          <p className="mb-4 text-gray-600">Student: <strong>{selectedStudent.name}</strong></p>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">Current Password (for reference)</label>
+            <div className="relative">
+              <input
+                type={showOldPass ? "text" : "password"}
+                placeholder="Current password (read-only)"
+                value={oldPassword}
+                readOnly
+                className="w-full border p-2 rounded-md bg-gray-100 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOldPass(!showOldPass)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showOldPass ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPass ? "text" : "password"}
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full border p-2 rounded-md pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPass(!showNewPass)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showNewPass ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleUpdatePassword}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md"
+            >
+              Update Password
+            </button>
+
+            <button
+              onClick={() => {
+                setStudentPasswordModal(false);
+                setNewPassword("");
+                setOldPassword("");
+              }}
+              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   // --------------------------------------------------------------------------------
 
   return (
@@ -295,6 +854,10 @@ const AdminDashboard = () => {
         <Toaster />
 
         {FacultyDetailsModal()}
+        {FacultyEditModal()}
+        {FacultyPasswordModal()}
+        {StudentDetailsModal()}
+        {StudentPasswordModal()}
 
         <main className="p-8 max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold mb-6 text-[#1d285d]">Faculty Management</h1>
@@ -377,10 +940,16 @@ const AdminDashboard = () => {
 
                         <td className="px-6 py-3">
                           <button
-                            onClick={() => setViewFaculty(faculty)}
-                            className="text-blue-600 hover:underline"
+                            onClick={() => handleEditFaculty(faculty)}
+                            className="text-blue-600 hover:underline me-3"
                           >
-                            View Details
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setViewFaculty(faculty)}
+                            className="text-green-600 hover:underline"
+                          >
+                            View
                           </button>
                         </td>
                       </tr>
@@ -452,21 +1021,30 @@ const AdminDashboard = () => {
 
               <input
                 name="session"
-                placeholder="Session"
+                placeholder="Session (e.g., 2025-26)"
                 value={formFaculty.session}
                 onChange={handleChange}
                 required
                 className="border p-2 rounded-md"
               />
 
-              <input
-                name="semester"
-                placeholder="Semester"
-                value={formFaculty.semester}
-                onChange={handleChange}
-                required
-                className="border p-2 rounded-md"
-              />
+              <div>
+                <select
+                  name="semester"
+                  placeholder="Select Semester"
+                  value={formFaculty.semester}
+                  onChange={handleChange}
+                  required
+                  className="border p-2 rounded-md w-full"
+                >
+                  <option value="">Select Semester</option>
+                  <option value="even">Even Semester</option>
+                  <option value="odd">Odd Semester</option>
+                </select>
+                <p style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
+                  Even: 2, 4, 6, 8 semesters | Odd: 1, 3, 5, 7 semesters
+                </p>
+              </div>
 
               {/* Subjects */}
               <div className="col-span-2">
@@ -511,6 +1089,87 @@ const AdminDashboard = () => {
                 )}
               </div>
             </form>
+          </div>
+
+          {/* ============ STUDENT MANAGEMENT ============ */}
+          <div className="mt-10">
+            <h2 className="text-2xl font-bold mb-4 text-[#1d285d]">Student Management</h2>
+
+            {/* Search Students */}
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Search students by name/ID/email"
+                className="border p-2 rounded-md w-full"
+                value={searchStudentTerm}
+                onChange={(e) => setSearchStudentTerm(e.target.value)}
+              />
+            </div>
+
+            {/* Toggle Student Table */}
+            <button
+              onClick={() => setShowStudentDetails((prev) => !prev)}
+              className="mb-6 px-5 py-2 bg-[#243278] text-white rounded-md"
+            >
+              {showStudentDetails ? "Hide Student List" : "Show Student List"}
+            </button>
+
+            {/* Student Table */}
+            {showStudentDetails && (
+              <div className="overflow-x-auto bg-white border rounded shadow mb-8">
+                <table className="min-w-full">
+                  <thead className="bg-[#243278] text-white text-left text-sm">
+                    <tr>
+                      <th className="px-6 py-3">Sr No</th>
+                      <th className="px-6 py-3">Student ID</th>
+                      <th className="px-6 py-3">Name</th>
+                      <th className="px-6 py-3">Email</th>
+                      <th className="px-6 py-3">Phone</th>
+                      <th className="px-6 py-3">Year</th>
+                      <th className="px-6 py-3">Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y text-sm">
+                    {(searchStudentTerm ? filteredStudents : students).map((student, index) => (
+                      <tr key={student.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-3">{index + 1}</td>
+                        <td className="px-6 py-3 font-mono text-xs">{student.studentId}</td>
+                        <td className="px-6 py-3 font-semibold">{student.name}</td>
+                        <td className="px-6 py-3">{student.email}</td>
+                        <td className="px-6 py-3">{student.phone}</td>
+                        <td className="px-6 py-3">{student.year || "-"}</td>
+                        <td className="px-6 py-3">
+                          <button
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              setFormStudent({
+                                name: student.name,
+                                email: student.email,
+                                phone: student.phone,
+                                year: student.year || "",
+                                department: student.department,
+                              });
+                            }}
+                            className="text-blue-600 hover:underline"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                    {(searchStudentTerm ? filteredStudents : students).length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="text-center py-4 text-gray-500">
+                          No students found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* CSV Upload */}

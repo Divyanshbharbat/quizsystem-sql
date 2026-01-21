@@ -273,6 +273,13 @@ export const getAllQuizConfigs = async (req, res) => {
     const quizConfigs = await QuizConfig.findAll({
       where: filter,
       order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: Faculty,
+          attributes: ["id", "name", "department"],
+          as: "faculty",
+        },
+      ],
     });
 
     const quizzes = await Quiz.findAll();
@@ -293,6 +300,11 @@ export const getAllQuizConfigs = async (req, res) => {
               selectedQuestions: selected ? selected.questionCount : 0,
               createdAt: config.createdAt,
               createdBy: config.createdBy,
+              createdByDetails: config.faculty ? {
+                id: config.faculty.id,
+                name: config.faculty.name,
+                department: config.faculty.department,
+              } : null,
             });
           }
         });
@@ -1291,7 +1303,12 @@ export const createQuizConfig = async (req, res) => {
   try {
     console.log("⏳ Creating quiz config in DB...");
 
+    // Generate unique SHA-based ID
+    const shaInput = `${title}-${category}-${facultyId}-${Date.now()}-${Math.random()}`;
+    const shaId = crypto.createHash('sha256').update(shaInput).digest('hex').substring(0, 12);
+
     const quiz = await QuizConfig.create({
+      id: shaId,
       title,
       category,
       timeLimit,
@@ -1300,7 +1317,7 @@ export const createQuizConfig = async (req, res) => {
       createdBy: facultyId
     });
 
-    console.log("✅ QuizConfig created successfully:", quiz.id || quiz);
+    console.log("✅ QuizConfig created successfully with SHA ID:", shaId);
 
     return res.status(201).json({
       success: true,
