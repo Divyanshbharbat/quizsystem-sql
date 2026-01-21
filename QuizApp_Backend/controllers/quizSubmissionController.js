@@ -160,11 +160,17 @@ console.log(`[SUBMIT] Received submission for quiz ${quizId} from student ${stud
 
     // 🔴 FIX: Use .update() instead of .save() for JSON field changes
     try {
-      await QuizConfig.update(
+      const updateResult = await QuizConfig.update(
         { completed: completed },  // Use .update() method instead of .save()
         { where: { id: quizId } }
       );
-      console.log(`[SUBMIT] ✅ Database UPDATE executed successfully`);
+      console.log(`[SUBMIT] ✅ Database UPDATE executed successfully. Result:`, updateResult);
+      
+      // Verify the update actually happened
+      const verifyQuizConfig = await QuizConfig.findByPk(quizId);
+      console.log(`[SUBMIT] ✅ Verification - Completed count in DB:`, verifyQuizConfig?.completed?.length || 0);
+      console.log(`[SUBMIT] ✅ Student ${studentId} in completed list:`, verifyQuizConfig?.completed?.some(c => String(c.studentId) === String(studentId)));
+      
     } catch (updateError) {
       console.error(`[SUBMIT] ❌ UPDATE FAILED! Error:`, updateError.message);
       console.error(`[SUBMIT] Full error:`, updateError);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import Navbar from "../../components/Navbar";
 import { useNavigate } from "react-router-dom";
+import toast, { Toaster } from "react-hot-toast";
 
 const CreateQuiz2 = () => {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ const CreateQuiz2 = () => {
 
   const [selectedDate, setSelectedDate] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [lastRefreshTime, setLastRefreshTime] = useState(null); // ✅ Track refresh time
 
   /* ================= AUTH CHECK ================= */
   useEffect(() => {
@@ -35,19 +37,57 @@ const CreateQuiz2 = () => {
     }
   }, [navigate]);
 
-  /* ================= FORM DATA ================= */
-  useEffect(() => {
-    const fetchFormData = async () => {
-      try {
-        const res = await axios.get(
-          `${import.meta.env.VITE_APP}/api/quizzes/grouped-categories2`
-        );
-        setQuizConfigsForForm(res.data?.data || []);
-      } catch (err) {
-        console.error(err);
+  /* ================= REFRESH CATEGORIES ================= */
+  const refreshCategories = async () => {
+    try {
+      console.log("\n[CREATE_QUIZ2] 🔄 REFRESHING CATEGORIES");
+      console.log("[CREATE_QUIZ2] Endpoint: /api/quizzes/grouped-categories2");
+      
+      const res = await axios.get(
+        `${import.meta.env.VITE_APP}/api/quizzes/grouped-categories2`
+      );
+      
+      console.log("[CREATE_QUIZ2] Response received:", res.status);
+      console.log("[CREATE_QUIZ2] Response data:", res.data);
+      
+      const categories = res.data?.data || [];
+      console.log("[CREATE_QUIZ2] ✅ Parsed " + categories.length + " category/subcategory combinations");
+      
+      if (categories.length > 0) {
+        console.log("[CREATE_QUIZ2] Categories found:");
+        categories.forEach(q => {
+          console.log("[CREATE_QUIZ2]   ✓ " + q.category + " / " + q.subcategory + " (" + q.totalQuestionsAvailable + " questions)");
+        });
+      } else {
+        console.log("[CREATE_QUIZ2] ⚠️ No categories found in response");
       }
-    };
-    fetchFormData();
+      
+      setQuizConfigsForForm(categories);
+      setLastRefreshTime(new Date().toLocaleTimeString());
+      toast.success("✅ Categories refreshed!", { duration: 2000 });
+      return categories;
+    } catch (err) {
+      console.error("[CREATE_QUIZ2] ❌ Error refreshing categories:", err);
+      console.error("[CREATE_QUIZ2] Error message:", err.message);
+      console.error("[CREATE_QUIZ2] Error response:", err.response?.data);
+      toast.error("❌ Failed to refresh categories", { duration: 3000 });
+      setQuizConfigsForForm([]);
+      return [];
+    }
+  };
+
+  /* ================= FORM DATA - AUTO REFRESH ================= */
+  useEffect(() => {
+    // Initial load
+    refreshCategories();
+    
+    // ✅ Auto-refresh every 10 seconds to catch newly uploaded image questions
+    const refreshInterval = setInterval(() => {
+      console.log("[CREATE_QUIZ2] ⏰ Auto-refreshing categories...");
+      refreshCategories();
+    }, 10000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
 
   /* ================= TABLE DATA ================= */
@@ -141,7 +181,7 @@ const CreateQuiz2 = () => {
           `${import.meta.env.VITE_APP}/api/quizzes/create-config`,
           {
             title,
-            timeLimit,
+            timeLimit: parseInt(timeLimit, 10), // ✅ Convert to integer
             category: selectedCategory,
             selections,
             facultyId: facultyDetails.id,
@@ -235,6 +275,7 @@ const CreateQuiz2 = () => {
   /* ================= UI ================= */
   return (
     <div className="bg-gray-50 min-h-screen">
+      <Toaster />
       <Navbar
         userName={facultyDetails?.name}
         onProfileClick={() => setSidebarOpen(!sidebarOpen)}
@@ -243,9 +284,34 @@ const CreateQuiz2 = () => {
       <div className="p-6">
         {/* ================= FORM ================= */}
         <div className="bg-white border rounded-lg p-6 mb-6 shadow-sm">
-          <h5 className="mb-4 fw-semibold">
-            {editId ? "Update Quiz Config" : "Create Quiz Config"}
-          </h5>
+          <div className="flex items-center justify-between mb-4">
+            <h5 className="fw-semibold m-0">
+              {editId ? "Update Quiz Config" : "Create Quiz Config"}
+            </h5>
+            <button
+              type="button"
+              onClick={async () => {
+                toast.loading("🔄 Refreshing categories...", { id: "refresh-cat" });
+                const categories = await refreshCategories();
+                if (categories.length > 0) {
+                  toast.success(`✅ Found ${categories.length} category combinations!`, { id: "refresh-cat" });
+                } else {
+                  toast.info("ℹ️ No categories found. Upload image questions first.", { id: "refresh-cat" });
+                }
+              }}
+              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition"
+              title="Refresh to see newly uploaded image-based questions"
+            >
+              🔄 Refresh Categories
+            </button>
+          </div>
+
+          {/* ✅ Status indicator */}
+          {lastRefreshTime && (
+            <div className="text-xs text-gray-500 mb-3">
+              ✅ Auto-refreshing every 10 seconds | Last refreshed: {lastRefreshTime}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             <input

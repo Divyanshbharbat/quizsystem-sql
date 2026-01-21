@@ -19,70 +19,111 @@ import {
 const OptionButton = ({ option, isSelected, onClick, disabled }) => (
   <button
     onClick={() => !disabled && onClick(option)}
-    className={`flex items-center justify-center text-center gap-2 p-4 md:p-5 rounded-lg border transition-transform duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-400 select-none break-words
+    className={`flex items-center justify-center text-center gap-2 p-6 md:p-8 rounded-xl border-3 transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-offset-2 select-none break-words font-semibold text-lg md:text-xl
       ${isSelected
-        ? "bg-green-600 text-white border-green-700 shadow-lg"
-        : "bg-white border-gray-300 hover:border-green-500 hover:shadow-sm"}`}
-    style={{ userSelect: "none", minHeight: 72 }}
+        ? "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-700 shadow-2xl scale-105"
+        : "bg-gradient-to-br from-white to-gray-50 border-gray-300 hover:border-green-500 hover:shadow-lg hover:scale-102"}`}
+    style={{ userSelect: "none", minHeight: 100 }}
     disabled={disabled}
     aria-pressed={isSelected}
   >
-    <span className="text-sm md:text-base leading-tight">{option}</span>
+    <span className="leading-tight">{option}</span>
   </button>
 );
 
-const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled }) => (
-  <div className="bg-white p-4 md:p-6 rounded-xl shadow-lg mb-6 select-none transition duration-300 hover:shadow-2xl">
-    <div className="text-sm text-gray-500 mb-2">Subcategory: {question.subcategory}</div>
-    <h2 className="text-lg md:text-2xl font-semibold mb-3 md:mb-4 leading-tight">
-      {question.question}
-      {question.description && (
-        <span className="block text-sm text-gray-500 mt-1">{question.description}</span>
-      )}
-    </h2>
+const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled }) => {
+  const [imageLoaded, setImageLoaded] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
 
-    {question.image ? (
-      <div className="flex flex-col md:flex-row gap-6 items-start" style={{ minHeight: 200 }}>
-        <div className="flex-shrink-0 md:w-1/2 w-full flex justify-center items-center">
-          <div className="w-full max-w-full rounded-lg overflow-hidden border" style={{ maxHeight: "60vh" }}>
-            <img
-              src={question.image}
-              alt="Question"
-              className="w-full h-full object-contain block"
-              draggable={false}
-              onContextMenu={(e) => e.preventDefault()}
-            />
-          </div>
-        </div>
-        <div className="flex-1 w-full">
-          <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(220px, 100%), 1fr))" }}>
-            {question.options.map((opt, idx) => (
-              <OptionButton
-                key={idx}
-                option={opt}
-                isSelected={selectedOption === opt}
-                onClick={onOptionSelect}
-                disabled={disabled}
+  // Safety check
+  if (!question || !question.options) {
+    return (
+      <div className="bg-white p-6 rounded-xl shadow-lg text-center text-gray-600">
+        <p className="text-lg">Loading question...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white p-4 md:p-6 rounded-xl shadow-lg mb-6 select-none transition duration-300 hover:shadow-2xl">
+      <div className="text-sm text-gray-500 mb-2">Subcategory: {question.subcategory || "N/A"}</div>
+      <h2 className="text-lg md:text-2xl font-semibold mb-3 md:mb-4 leading-tight">
+        {question.question || "No question text"}
+        {question.description && (
+          <span className="block text-sm text-gray-500 mt-1">{question.description}</span>
+        )}
+      </h2>
+
+      {question.image ? (
+        <div className="flex flex-col gap-8">
+          {/* IMAGE SECTION - FULL WIDTH AND LARGE */}
+          <div className="w-full flex justify-center items-center">
+            <div className="w-full rounded-lg overflow-hidden border-4 border-blue-300 relative bg-gradient-to-br from-gray-50 to-gray-100" style={{ maxHeight: "75vh", maxWidth: "100%" }}>
+              {!imageLoaded && !imageError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+                  <div className="text-center">
+                    <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-b-4 border-blue-500"></div>
+                    <p className="mt-3 text-gray-700 text-lg font-semibold">Loading image...</p>
+                  </div>
+                </div>
+              )}
+              {imageError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-red-100 z-10">
+                  <div className="text-center p-6">
+                    <p className="text-red-700 font-bold text-xl">❌ Failed to load image</p>
+                    <p className="text-sm text-red-600 mt-2 break-all">{question.image}</p>
+                  </div>
+                </div>
+              )}
+              <img
+                src={question.image}
+                alt="Question"
+                className="w-full h-full object-contain block"
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                onLoad={() => setImageLoaded(true)}
+                onError={() => {
+                  setImageLoaded(true);
+                  setImageError(true);
+                  console.error("[IMAGE ERROR] Failed to load image:", question.image);
+                }}
+                style={{ display: imageLoaded && !imageError ? "block" : "none", minHeight: "300px" }}
               />
-            ))}
+            </div>
+          </div>
+
+          {/* OPTIONS SECTION - LARGE AND CLEAR */}
+          <div className="w-full">
+            <p className="text-sm font-semibold text-gray-600 mb-4">Select your answer:</p>
+            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
+              {question.options.map((opt, idx) => (
+                <OptionButton
+                  key={idx}
+                  option={opt}
+                  isSelected={selectedOption === opt}
+                  onClick={onOptionSelect}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
-    ) : (
-      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))" }}>
-        {question.options.map((opt, idx) => (
-          <OptionButton
-            key={idx}
-            option={opt}
-            isSelected={selectedOption === opt}
-            onClick={onOptionSelect}
-            disabled={disabled}
-          />
-        ))}
-      </div>
-    )}
-  </div>
-);
+      ) : (
+        <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
+          {question.options.map((opt, idx) => (
+            <OptionButton
+              key={idx}
+              option={opt}
+              isSelected={selectedOption === opt}
+              onClick={onOptionSelect}
+              disabled={disabled}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const NavigationButtons = ({ currentIndex, totalQuestions, canSubmit, onPrev, onNext, onSubmit, submitting, disabled }) => (
   <div className="mt-6 w-full select-none">
@@ -250,7 +291,7 @@ const Quiz = () => {
       setWindowFocusWarnings(focusLossCount);
       
       // Show warning
-      toast.warning("⚠️ You switched tabs! Stay in the quiz window.");
+      toast.error("⚠️ You switched tabs! Stay in the quiz window.");
 
       // On first blur = block for 30 seconds (WARNING: Very strict - can change to >= 2 later)
       if (focusLossCount >= 1 && !quizFrozen) {
@@ -401,7 +442,7 @@ useEffect(() => {
         `${import.meta.env.VITE_APP}/api/quizzes/${quizId}`,
         { withCredentials: true }
       );
-      console.log(data)
+      console.log("fetching data in quiz.jsx",data)
       
       // ✅ Check if student is BLOCKED FIRST (before checking success)
       const isBlocked = data.blocked || false;
@@ -428,6 +469,8 @@ useEffect(() => {
           initialBlockDuration = 30; // fallback
         }
         
+        console.log(`[BLOCK LOAD] Initial duration: ${initialBlockDuration}s, expiresAt: ${new Date(expiresAt).toISOString()}`);
+        
         if (initialBlockDuration > 0) {
           setQuizFrozen(true);
           setBlockCountdown(initialBlockDuration);
@@ -438,41 +481,46 @@ useEffect(() => {
             window._blockExpiresAt = expiresAt;
           }
           
-          // ✅ PROPER COUNTDOWN LOGIC - Calculate from expiresAt timestamp (works on refresh)
-          let timeRemaining = initialBlockDuration;
-          console.log(`[BLOCK] Starting countdown from ${initialBlockDuration} seconds, expiresAt=${expiresAt}`);
+          // ✅ PROPER COUNTDOWN LOGIC - Calculate from expiresAt timestamp (works on refresh/relogin)
+          console.log(`[BLOCK COUNTDOWN] Starting countdown from ${initialBlockDuration} seconds`);
+          
+          // Clear any previous interval
+          if (window._blockCountdownInterval) {
+            clearInterval(window._blockCountdownInterval);
+          }
           
           // Update countdown every 1 second for smooth display
           const countdownInterval = setInterval(() => {
             // ✅ FIXED: Calculate remaining time from expiresAt, not just decrement
             if (window._blockExpiresAt) {
               const now = Date.now();
-              timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+              let timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
               timeRemaining = Math.max(0, timeRemaining); // Don't go below 0
-            } else {
-              timeRemaining--;
-            }
-
-            console.log(`[BLOCK] Countdown: ${timeRemaining}s remaining`);
-            setBlockCountdown(timeRemaining);
-            
-            // When countdown reaches 0, auto-submit
-            if (timeRemaining <= 0) {
-              console.log("[BLOCK] Countdown reached 0, auto-submitting");
-              clearInterval(countdownInterval);
-              setQuizFrozen(false);
-              // Block expired - show message
-              toast.success("Block expired. Redirecting...");
-              navigate("/");
+              
+              console.log(`[BLOCK COUNTDOWN] Server time: ${new Date().toISOString()}, Expires: ${new Date(window._blockExpiresAt).toISOString()}, Remaining: ${timeRemaining}s`);
+              setBlockCountdown(timeRemaining);
+              
+              // When countdown reaches 0, RESUME QUIZ (don't redirect)
+              if (timeRemaining <= 0) {
+                console.log("[BLOCK COUNTDOWN] Block expired - resuming quiz");
+                clearInterval(countdownInterval);
+                window._blockCountdownInterval = null;
+                setQuizFrozen(false);
+                toast.success("✅ Block expired - resuming quiz!");
+                console.log("[BLOCK COUNTDOWN] Quiz unfrozen, student can continue");
+              }
             }
           }, 1000); // Update every 1 second
           
           window._blockCountdownInterval = countdownInterval;
+        } else if (initialBlockDuration === 0) {
+          console.log("[BLOCK LOAD] Block time already expired - unfreezing quiz");
+          setQuizFrozen(false);
+          // Continue loading quiz normally
         }
         
-        // Don't continue - stay on block screen
-        setProgressLoaded(true);
-        return;
+        // ✅ Continue to load quiz even if was blocked (block expired)
+        // DON'T return here - let quiz load
       }
       
       // ✅ Only check success if NOT blocked
@@ -484,7 +532,15 @@ useEffect(() => {
       const quiz = data.data.quizConfig;
       const progress = data.data.progress;
       const selectionsWithQuestions = data.data.selectionsWithQuestions; // ✅ Get questions from backend
-      console.log("[QUIZ LOAD] Progress:", progress)
+      console.log("[QUIZ LOAD] Progress:", progress);
+      console.log("[QUIZ LOAD] Selections:", selectionsWithQuestions);
+      if (selectionsWithQuestions && selectionsWithQuestions.length > 0) {
+        console.log("[QUIZ LOAD] First selection:", selectionsWithQuestions[0]);
+        if (selectionsWithQuestions[0].questions && selectionsWithQuestions[0].questions.length > 0) {
+          console.log("[QUIZ LOAD] First question:", selectionsWithQuestions[0].questions[0]);
+          console.log("[QUIZ LOAD] Has image?", selectionsWithQuestions[0].questions[0].image ? "✅ YES" : "❌ NO");
+        }
+      }
       const isCompleted = data.completed || false;
 
       // ✅ Check if student already completed
@@ -497,13 +553,19 @@ useEffect(() => {
       setQuiz(quiz);
 
       // Use timeLeft directly from backend
-      setTimeLeft(
-        typeof progress?.timeLeft === "number"
-          ? progress.timeLeft
-          : quiz.timeLimit * 60
-      );
+      let initialTimeLeft = typeof progress?.timeLeft === "number"
+        ? progress.timeLeft
+        : quiz.timeLimit * 60;
 
+      console.log("[QUIZ LOAD] TimeLeft from backend:", initialTimeLeft, "seconds");
+      console.log("[QUIZ LOAD] Quiz timeLimit:", quiz.timeLimit, "minutes =", quiz.timeLimit * 60, "seconds");
+      console.log("[QUIZ LOAD] Time penalty applied (if blocked):", (quiz.timeLimit * 60 - initialTimeLeft), "seconds");
+
+      setTimeLeft(initialTimeLeft);
+
+      console.log("[QUIZ LOAD] About to set selections with:", selectionsWithQuestions);
       setSelections(selectionsWithQuestions || []); // ✅ Use selectionsWithQuestions instead of quiz.selections
+      console.log("[QUIZ LOAD] setSelections called");
 
       // Load progress if exists
       if (progress) {
@@ -543,6 +605,8 @@ useEffect(() => {
             initialBlockDuration = 30;
           }
           
+          console.log(`[BLOCK ERROR HANDLER] Initial duration: ${initialBlockDuration}s, expiresAt: ${new Date(expiresAt).toISOString()}`);
+          
           if (initialBlockDuration > 0) {
             setQuizFrozen(true);
             setBlockCountdown(initialBlockDuration);
@@ -552,33 +616,40 @@ useEffect(() => {
               window._blockExpiresAt = expiresAt;
             }
             
-            let timeRemaining = initialBlockDuration;
-            console.log(`[BLOCK ERROR] Starting countdown from ${initialBlockDuration}s`);
+            // Clear any previous interval
+            if (window._blockCountdownInterval) {
+              clearInterval(window._blockCountdownInterval);
+            }
+            
+            console.log(`[BLOCK ERROR HANDLER] Starting countdown from ${initialBlockDuration}s`);
             
             const countdownInterval = setInterval(() => {
               if (window._blockExpiresAt) {
                 const now = Date.now();
-                timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+                let timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
                 timeRemaining = Math.max(0, timeRemaining);
-              } else {
-                timeRemaining--;
-              }
-              
-              setBlockCountdown(timeRemaining);
-              
-              if (timeRemaining <= 0) {
-                clearInterval(countdownInterval);
-                setQuizFrozen(false);
-                toast.success("Block expired. Redirecting...");
-                navigate("/");
+                
+                console.log(`[BLOCK ERROR COUNTDOWN] Remaining: ${timeRemaining}s`);
+                setBlockCountdown(timeRemaining);
+                
+                if (timeRemaining <= 0) {
+                  console.log("[BLOCK ERROR COUNTDOWN] Block expired - resuming quiz");
+                  clearInterval(countdownInterval);
+                  window._blockCountdownInterval = null;
+                  setQuizFrozen(false);
+                  toast.success("✅ Block expired - resuming quiz!");
+                }
               }
             }, 1000);
             
             window._blockCountdownInterval = countdownInterval;
+          } else if (initialBlockDuration === 0) {
+            console.log("[BLOCK ERROR HANDLER] Block already expired - unfreezing");
+            setQuizFrozen(false);
+            // Continue loading quiz
           }
           
-          setProgressLoaded(true);
-          return;
+          // ✅ Continue loading quiz (don't return)
         }
       }
       
@@ -596,10 +667,14 @@ useEffect(() => {
      Shuffle Questions & Options
   --------------------- */
 useEffect(() => {
+  console.log("[SHUFFLE] Check - selections:", selections.length, "progressLoaded:", progressLoaded, "student:", !!student);
+  
   if (selections.length > 0 && progressLoaded && student) {
     let flatQuestions = [];
 
     selections.forEach((s) => {
+      console.log("[SHUFFLE] Processing subcategory:", s.subcategory, "questions count:", s.questions?.length || 0);
+      
       s.questions.forEach((q) => {
         if (q && q.options) {
           // Use selectedOption from backend (already set based on progress)
@@ -615,7 +690,10 @@ useEffect(() => {
       });
     });
 
-    setQuestions(seededShuffle(flatQuestions, student.id + quizId));
+    console.log("[SHUFFLE] Flat questions created:", flatQuestions.length);
+    const shuffled = seededShuffle(flatQuestions, student.id + quizId);
+    console.log("[SHUFFLE] Final shuffled questions:", shuffled.length);
+    setQuestions(shuffled);
   }
 }, [selections, progressLoaded, student, answers]);
 
@@ -637,7 +715,9 @@ useEffect(() => {
      Save Progress
   --------------------- */
   const saveProgress = async (answerList = answers) => {
-    if (quizCompleted || quizFrozen || !progressLoaded) return;
+    if (quizCompleted || !progressLoaded) return;
+    // ✅ IMPORTANT: Allow saving timeLeft EVEN when quizFrozen=true
+    // This ensures timer penalty during block is persisted to database
     const safeTimeLeft =
       typeof timeLeftRef.current === "number" && timeLeftRef.current >= 0
         ? timeLeftRef.current
@@ -727,14 +807,16 @@ useEffect(() => {
      Auto-save every 5 seconds
   --------------------- */
 useEffect(() => {
-  if (!progressLoaded || quizCompleted || quizFrozen || submitting) return;
+  if (!progressLoaded || quizCompleted || submitting) return;
+  // ✅ IMPORTANT: Continue auto-saving EVEN when quizFrozen=true
+  // This ensures timer penalty during block is persisted to database
 
   const id = setInterval(() => {
     saveProgress();
   }, 5000);
 
   return () => clearInterval(id);
-}, [progressLoaded, quizCompleted, quizFrozen, submitting, currentQuestionIndex, answers]);
+}, [progressLoaded, quizCompleted, submitting, currentQuestionIndex, answers])
 
   /* ---------------------
      OPTIONAL Fullscreen with Cheating Detection
@@ -790,6 +872,8 @@ useEffect(() => {
                 if (timeRemaining <= 0) {
                   clearInterval(countdownInterval);
                   console.log("[FULLSCREEN BLOCK] Block expired - checking student state");
+                  console.log("[FULLSCREEN BLOCK EXPIRED] Current timeLeft:", timeLeft, "seconds");
+                  console.log("[FULLSCREEN BLOCK EXPIRED] Time penalty applied: ~30 seconds");
 
                   // After 30 seconds, check if student is back in fullscreen
                   const isBackInFullscreen = !!document.fullscreenElement;
@@ -798,11 +882,13 @@ useEffect(() => {
                   if (isBackInFullscreen) {
                     // ✅ Student is back in fullscreen → Resume quiz
                     console.log("[RESUME] Student back in fullscreen - resuming quiz");
+                    console.log("[RESUME] Student has", timeLeft, "seconds remaining (30s penalty already applied)");
                     setQuizFrozen(false);
                     toast.success("✅ You're back in fullscreen. Quiz resumed!");
                   } else {
                     // ❌ Student still not in fullscreen → Auto-submit
                     console.log("[AUTO-SUBMIT] Student NOT in fullscreen - auto-submitting quiz");
+                    console.log("[AUTO-SUBMIT] Current timeLeft:", timeLeft, "seconds (penalty applied)");
                     toast.error("❌ Block expired but you're not in fullscreen. Auto-submitting quiz...");
                     handleSubmit(); // Auto-submit with current answers
                   }
@@ -930,7 +1016,10 @@ const handleSubmit = async () => {
       };
     });
 
+    console.log(`[SUBMIT] ⏱️ Submitting quiz ${quizId} at ${new Date().toISOString()}`);
     console.log(`[SUBMIT] Frontend sending ${enrichedAnswers.length} answers:`, enrichedAnswers.slice(0, 3));
+    console.log(`[SUBMIT] Answers array size:`, answers.length);
+    console.log(`[SUBMIT] Questions array size:`, questions.length);
 
     // Submit to backend
     const response = await axios.post(
@@ -978,6 +1067,22 @@ const handleSubmit = async () => {
   useEffect(() => {
     if (!progressLoaded || quizCompleted) return;
 
+    // ✅ Block copy (Ctrl+C / Cmd+C)
+    const handleCopy = (e) => {
+      e.preventDefault();
+      toast.error("🚫 Copying text is disabled during quiz!");
+    };
+
+    // ✅ Block right-click context menu
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      toast.error("🚫 Right-click is disabled during quiz!");
+    };
+
+    // ✅ Add listeners for copy and context menu
+    document.addEventListener("copy", handleCopy);
+    document.addEventListener("contextmenu", handleContextMenu);
+
     let metaKeyPressed = false; // Track if meta key is held down
 
     const handleKeyDown = (e) => {
@@ -995,6 +1100,7 @@ const handleSubmit = async () => {
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         console.warn("[KEYBOARD BLOCKED] Escape key pressed");
         
         if (!quizFrozen) {
@@ -1008,8 +1114,10 @@ const handleSubmit = async () => {
               
               if (result && result.expiresAt) {
                 // Backend confirmed block is saved to database
+                console.log("[ESC KEY] Setting quizFrozen to TRUE");
                 setQuizFrozen(true);
                 const remainingSeconds = result.remainingSeconds || 30;
+                console.log("[ESC KEY] Setting blockCountdown to:", remainingSeconds);
                 setBlockCountdown(remainingSeconds);
                 window._blockExpiresAt = result.expiresAt;
                 
@@ -1023,10 +1131,16 @@ const handleSubmit = async () => {
                   { id: "esc-block", duration: 5000 }
                 );
                 console.log(`[ESC KEY] Block confirmed - ${remainingSeconds}s remaining`);
+              } else {
+                console.error("[ESC KEY] ❌ Invalid result from blockStudent:", result);
+                // Still freeze locally even if result is invalid
+                setQuizFrozen(true);
+                setBlockCountdown(30);
               }
             })
             .catch(err => {
               console.error("[ESC KEY] ❌ Backend call failed:", err);
+              console.error("[ESC KEY] Error details:", err.message, err.response?.data);
               // Still freeze locally even if backend call fails (defensive)
               setQuizFrozen(true);
               setBlockCountdown(30);
@@ -1038,6 +1152,14 @@ const handleSubmit = async () => {
         } else {
           console.log("[SECURITY] Escape blocked silently during block state");
         }
+        return;
+      }
+
+      // Block F12 (Developer Tools)
+      if (e.key === 'F12') {
+        e.preventDefault();
+        e.stopPropagation();
+        toast.error("🚫 Developer tools are disabled during quiz!");
         return;
       }
 
@@ -1149,34 +1271,40 @@ const handleSubmit = async () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true);
       document.removeEventListener('keyup', handleKeyUp, true);
+      document.removeEventListener("copy", handleCopy);
+      document.removeEventListener("contextmenu", handleContextMenu);
     };
   }, [progressLoaded, quizCompleted]);
   /* ---------------------
-     Tab Visibility - Block if switched tabs
+     Tab Visibility - Auto-submit if switched tabs
   --------------------- */
   useEffect(() => {
     if (!progressLoaded || quizCompleted) return;
 
     const handleVisibilityChange = async () => {
-      if (document.hidden && !quizCompleted && !quizFrozen) {
-        console.log("[TAB VISIBILITY] Student switched tabs - BLOCKING");
-        toast.error("⚠️ You switched tabs! You are now BLOCKED for 30 seconds.");
+      if (document.hidden && !quizCompleted) {
+        console.log("[TAB VISIBILITY] Student switched tabs - AUTO-SUBMITTING");
+        console.log("[TAB VISIBILITY] Current answers:", answers);
+        toast.error("⚠️ You switched tabs! Your quiz is being auto-submitted...");
         
         try {
-          // Block the student for switching tabs
-          const result = await blockStudent(quizId);
-          if (result && result.expiresAt) {
-            setQuizFrozen(true);
-            setBlockCountdown(result.remainingSeconds || 30);
-            window._blockExpiresAt = result.expiresAt;
-            console.log("[TAB BLOCK] Student blocked for tab switch. Remaining: " + (result.remainingSeconds || 30) + "s");
-          }
+          // Save progress first to ensure all answers are captured
+          await saveProgress(answers);
+          
+          // Wait a moment for save to complete
+          setTimeout(() => {
+            handleSubmit();
+          }, 500);
         } catch (err) {
-          console.error("[TAB BLOCK] Failed to block on tab switch:", err);
+          console.error("[TAB SWITCH] Failed to auto-submit:", err);
+          toast.error("Error submitting quiz. Please refresh.");
         }
-      } else if (!document.hidden && !quizFrozen) {
+      } else if (!document.hidden) {
         console.log("[TAB VISIBILITY] Student returned to quiz tab");
-        toast.success("✅ Welcome back to the quiz!");
+        // Don't welcome them back if already submitted
+        if (!quizCompleted) {
+          toast.success("✅ Welcome back to the quiz!");
+        }
       }
     };
 
@@ -1295,7 +1423,7 @@ const handleSubmit = async () => {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [quizFrozen, progressLoaded, quizCompleted, quizId]);
+  }, [progressLoaded, quizCompleted]);
 
 
   // Cleanup poll interval on unmount
@@ -1338,39 +1466,84 @@ const handleSubmit = async () => {
   --------------------- */
   
   // ✅ Show block screen FIRST, even if questions not loaded yet
-  if (quizFrozen && blockCountdown > 0) {
-    return (
-      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
-        <Navbar 
-          userName={student?.name || "Student"} 
-          onProfileClick={toggleSidebar}
-          isQuizActive={false}
-        />
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm text-white select-none pointer-events-auto">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold mb-4">⏸️ Quiz Frozen</h1>
-            <p className="text-xl mb-2">You have been blocked for cheating.</p>
-            <div className="text-5xl font-bold mb-4 text-red-400">{blockCountdown}s</div>
-            <p className="text-lg mb-4">Remaining block time</p>
-            {!document.fullscreenElement && (
-              <div className="mb-4">
-                <p className="text-sm mb-2">You must be in fullscreen mode to continue.</p>
-                <button
-                  onClick={enterFullscreen}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
-                >
-                  Enter Fullscreen
-                </button>
+  if (quizFrozen && blockCountdown >= 0) {
+    try {
+      return (
+        <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
+          <Navbar 
+            userName={student?.name || "Student"} 
+            onProfileClick={toggleSidebar}
+            isQuizActive={false}
+          />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm text-white select-none pointer-events-auto">
+            <div className="text-center max-w-2xl px-6">
+              <h1 className="text-4xl font-bold mb-4">⏸️ Quiz Blocked</h1>
+              <p className="text-xl mb-6 text-red-300">You have been blocked for violating quiz security rules.</p>
+              
+              {/* Countdown Timer - Shows in real-time */}
+              <div className="bg-gradient-to-r from-red-600 to-red-800 rounded-lg p-8 mb-6">
+                <p className="text-sm text-red-100 mb-2">⏱️ REMAINING TIME</p>
+                <div className="text-6xl font-bold text-white animate-pulse">{blockCountdown}s</div>
+                <p className="text-sm text-red-100 mt-2">30 second penalty applied • Time keeps running</p>
               </div>
-            )}
-            <p className="text-sm mt-4">Return to the quiz tab and fullscreen to continue.</p>
+              
+              {/* Status and Instructions */}
+              <div className="bg-gray-900 bg-opacity-80 rounded-lg p-6 mb-6 text-left space-y-3">
+                <p className="text-yellow-300 font-semibold mb-4">📋 What happens when timer reaches 0:</p>
+                <div className="space-y-2 text-sm">
+                  <div className="flex gap-3">
+                    <span className="text-red-400 font-bold">❌</span>
+                    <span><span className="font-semibold text-red-300">Not in fullscreen:</span> Quiz AUTO-SUBMITS (all remaining unanswered = wrong)</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-red-400 font-bold">❌</span>
+                    <span><span className="font-semibold text-red-300">Tab switched:</span> Quiz AUTO-SUBMITS immediately</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="text-green-400 font-bold">✅</span>
+                    <span><span className="font-semibold text-green-300">Stay in fullscreen:</span> Resume quiz after timer expires</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Fullscreen Status */}
+              {!document.fullscreenElement ? (
+                <div className="mb-6 bg-yellow-900 bg-opacity-80 rounded-lg p-4 border border-yellow-600">
+                  <p className="text-yellow-200 text-sm mb-3 font-semibold">⚠️ YOU MUST BE IN FULLSCREEN MODE!</p>
+                  <button
+                    onClick={enterFullscreen}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition transform hover:-translate-y-0.5"
+                  >
+                    ↗️ Enter Fullscreen Now
+                  </button>
+                </div>
+              ) : (
+                <div className="mb-6 bg-green-900 bg-opacity-80 rounded-lg p-3">
+                  <p className="text-green-200 text-sm font-semibold">✅ Fullscreen mode active</p>
+                </div>
+              )}
+              
+              <p className="text-sm text-gray-300 border-t border-gray-600 pt-4">
+                <span className="block mb-2">⏳ The clock is running...</span>
+                <span>Stay focused, stay in fullscreen, and wait for the timer to expire.</span>
+              </p>
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    } catch (err) {
+      console.error("[BLOCK SCREEN ERROR]", err);
+      return (
+        <div className="h-screen w-screen bg-black flex items-center justify-center text-white text-center">
+          <div>
+            <h1 className="text-3xl font-bold mb-4">⏸️ BLOCKED</h1>
+            <p className="text-xl mb-4">Remaining: {blockCountdown}s</p>
+            <p className="text-sm text-gray-400">({err.message})</p>
+          </div>
+        </div>
+      );
+    }
   }
-
-  if (!progressLoaded || questions.length === 0)
     return <p className="text-center mt-20 text-lg">Loading quiz...</p>;
 
   if (isMobileDevice) {
@@ -1471,12 +1644,21 @@ const handleSubmit = async () => {
           </div>
 
           <div className="flex-grow overflow-auto py-2">
-            <QuestionComponent
-              question={currentQ}
-              selectedOption={selectedOption}
-              onOptionSelect={handleOptionClick}
-              disabled={quizFrozen || quizCompleted}
-            />
+            {currentQ ? (
+              <QuestionComponent
+                question={currentQ}
+                selectedOption={selectedOption}
+                onOptionSelect={handleOptionClick}
+                disabled={quizFrozen || quizCompleted}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-gray-600">
+                  <p className="text-lg font-semibold">Loading question...</p>
+                  <p className="text-sm">Current: {currentQuestionIndex}, Total: {questions.length}</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 w-full">

@@ -396,11 +396,13 @@ useEffect(() => {
           {/* 🔹 Student List or Details */}
           {!selectedStudent ? (
             selectedYear && (
-              <div className="overflow-x-auto mb-6">
-                <h3 className="text-lg font-semibold mb-3">
-                  {selectedYear} Year Students
-                </h3>
-                <table className="w-full border border-gray-300 rounded-md shadow-sm">
+              <>
+                {students.length > 0 ? (
+                  <div className="overflow-x-auto mb-6">
+                    <h3 className="text-lg font-semibold mb-3">
+                      {selectedYear} Year Students ({students.length})
+                    </h3>
+                    <table className="w-full border border-gray-300 rounded-md shadow-sm">
                   <thead>
                     <tr className="bg-[#243278] text-white">
                       <th className="p-2 border">Sr No</th>
@@ -479,7 +481,20 @@ useEffect(() => {
                     )}
                   </tbody>
                 </table>
-              </div>
+                    </div>
+                ) : (
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-8 text-center">
+                    <div className="text-4xl mb-3">👤</div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">No Students Found</h3>
+                    <p className="text-gray-600">
+                      No students registered for Year {selectedYear} in {facultyDetails?.department} department.
+                    </p>
+                    <p className="text-sm text-gray-500 mt-3">
+                      You can add students using the "Add Student" form above.
+                    </p>
+                  </div>
+                )}
+              </>
             )
           ) : (
             <div

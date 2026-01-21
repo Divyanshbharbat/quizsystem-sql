@@ -23,6 +23,7 @@ import {
   getGroupedCategories,
   getAllCategoriesAndSubcategories,
   addImageQuestion,
+  diagnoseDatabase,
 } from "../controllers/quizController.js";
 import { blockStudent } from "../controllers/quizController.js"
 import { submitQuiz } from "../controllers/quizSubmissionController.js";
@@ -34,6 +35,7 @@ router.get("/grouped-categories", getGroupedCategories);
 router.get("/grouped-categories2", getAllCategoriesAndSubcategories);
 router.get("/gettabledata", getAllQuizConfigs);
 router.get("/getall", getAllFaculties);
+router.get("/diagnose/database", diagnoseDatabase);
 
 router.post("/create", createQuizByFaculty);
 router.post("/create-config", createQuizConfig);

@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 const CreateQuiz = () => {
   const [csvFile, setCsvFile] = useState(null);
   const [quizzes, setQuizzes] = useState([]); // ✅ always array
+  const [uploadingImage, setUploadingImage] = useState(false); // ✅ Loader state
 
   const [isNewQuiz, setIsNewQuiz] = useState(false);
   const [currentQuizId, setCurrentQuizId] = useState(null);
@@ -110,14 +111,31 @@ const CreateQuiz = () => {
     );
 
     try {
+      setUploadingImage(true); // ✅ Show loader
+      toast.loading("Uploading image-based question...", { id: "img-upload" });
+      console.log("[IMAGE_UPLOAD] Sending request to /api/quizzes/imagebaseqs");
+      console.log("[IMAGE_UPLOAD] FormData:", {
+        category: category,
+        subcategory: subcategory,
+        description: description,
+        options: options,
+        answer: options["ABCD".indexOf(correctOption)]
+      });
+      
       const res = await axios.post("http://localhost:5000/api/quizzes/imagebaseqs", formData);
-      toast.success("Image quiz created");
+      console.log("[IMAGE_UPLOAD] ✅ Response received:", res.data);
+      
+      setUploadingImage(false); // ✅ Hide loader
+      toast.success("✅ Image question uploaded! Refreshing categories...", { id: "img-upload", duration: 3000 });
       setCurrentQuizId(res.data.quizId);
       setIsNewQuiz(true);
       resetImageForm(false);
       fetchQuizzes();
     } catch (err) {
-      toast.error("Image quiz creation failed");
+      setUploadingImage(false); // ✅ Hide loader on error
+      console.error("[IMAGE_UPLOAD] ❌ Upload failed:", err);
+      console.error("[IMAGE_UPLOAD] Error response:", err.response?.data);
+      toast.error("❌ Image upload failed: " + (err.response?.data?.message || err.message), { id: "img-upload", duration: 4000 });
     }
   };
 
@@ -156,14 +174,20 @@ const CreateQuiz = () => {
     );
 
     try {
+      setUploadingImage(true); // ✅ Show loader
+      toast.loading("Adding image question...", { id: "img-add" });
+      
       await axios.post(
         `/api/quizzes/${currentQuizId}/addqs`,
         formData
       );
-      toast.success("Question added");
+      
+      setUploadingImage(false); // ✅ Hide loader
+      toast.success("✅ Question added successfully!", { id: "img-add" });
       resetImageForm(false);
     } catch (err) {
-      toast.error("Failed to add question");
+      setUploadingImage(false); // ✅ Hide loader on error
+      toast.error("❌ Failed to add question", { id: "img-add" });
     }
   };
 
@@ -359,12 +383,29 @@ const CreateQuiz = () => {
               {/* Submit Button */}
               <button
                 onClick={handleCreateImageQuiz}
-                className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold rounded-lg transition duration-200 transform hover:scale-105 flex items-center justify-center gap-2"
+                disabled={uploadingImage} // ✅ Disable during upload
+                className={`w-full mt-6 px-6 py-3 text-white font-bold rounded-lg transition duration-200 transform flex items-center justify-center gap-2 ${
+                  uploadingImage
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 hover:scale-105"
+                }`}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Create Quiz Question
+                {uploadingImage ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Create Quiz Question
+                  </>
+                )}
               </button>
             </div>
           </div>

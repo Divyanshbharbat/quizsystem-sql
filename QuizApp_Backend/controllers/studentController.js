@@ -355,12 +355,19 @@ export const resetPassword = async (req, res) => {
 
     if (!user) return res.status(400).json({ message: "Invalid or expired token" });
 
+    console.log("[RESET_PASSWORD] Hashing password before update...");
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("[RESET_PASSWORD] Password hashed, hash starts with:", hashedPassword.substring(0, 10));
+    
+    // ✅ Directly set hashed password (controller handles hashing, not the model)
     user.password = hashedPassword;
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
 
     await user.save();
+    
+    console.log("[RESET_PASSWORD] Password saved to database");
+    console.log("[RESET_PASSWORD] Password field now starts with:", user.password.substring(0, 10));
 
     res.json({ success: true, message: "Password reset successful" });
   } catch (err) {
@@ -551,9 +558,15 @@ export const updateStudentPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Student not found" });
     }
 
-    // Hash the new password
+    // ✅ Hash the new password - controller handles hashing, not the model
+    console.log("[UPDATE_STUDENT_PASSWORD] Hashing password before update...");
     const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("[UPDATE_STUDENT_PASSWORD] Password hashed, hash starts with:", hashedPassword.substring(0, 10));
+    
     await student.update({ password: hashedPassword });
+    
+    console.log("[UPDATE_STUDENT_PASSWORD] Password updated in database for student:", req.params.studentId);
+    console.log("[UPDATE_STUDENT_PASSWORD] Verifying - password field now starts with:", student.password.substring(0, 10));
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
@@ -606,14 +619,22 @@ export const changeStudentPassword = async (req, res) => {
     }
 
     // Verify old password
+    console.log("[CHANGE_PASSWORD] Verifying old password for student:", studentId);
     const isPasswordValid = await bcrypt.compare(oldPassword, student.password);
     if (!isPasswordValid) {
+      console.log("[CHANGE_PASSWORD] Old password verification FAILED");
       return res.status(401).json({ success: false, message: "wrong_password" });
     }
 
+    console.log("[CHANGE_PASSWORD] Old password verified successfully, hashing new password...");
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+    console.log("[CHANGE_PASSWORD] New password hashed, hash starts with:", hashedPassword.substring(0, 10));
+    
     await student.update({ password: hashedPassword });
+    
+    console.log("[CHANGE_PASSWORD] Password updated in database for student:", studentId);
+    console.log("[CHANGE_PASSWORD] Verifying - password field now starts with:", student.password.substring(0, 10));
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();

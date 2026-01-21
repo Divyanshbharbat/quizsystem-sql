@@ -13,62 +13,201 @@ export const upload = multer({ storage });
 export const addImageQuestion = async (req, res) => {
   try {
     const { category, subcategory, description, options, answer } = req.body;
+    console.log("\n" + "=".repeat(80));
+    console.log("=== [IMAGE_QUESTION] START ===");
+    console.log("=".repeat(80));
+    console.log("[IMAGE_QUESTION] Input - category:", category);
+    console.log("[IMAGE_QUESTION] Input - subcategory:", subcategory);
+    console.log("[IMAGE_QUESTION] Input - description:", description);
+    console.log("[IMAGE_QUESTION] Input - options:", options);
+    console.log("[IMAGE_QUESTION] Input - answer:", answer);
+    console.log("[IMAGE_QUESTION] Input - image file:", req.file ? "✅ YES" : "❌ NO");
 
-    if (!category || !subcategory)
+    if (!category || !subcategory) {
+      console.log("[IMAGE_QUESTION] ❌ Missing category or subcategory");
       return res.status(400).json({ success: false, message: "Category & Subcategory required" });
+    }
 
-    if (!req.file)
+    if (!req.file) {
+      console.log("[IMAGE_QUESTION] ❌ No image file provided");
       return res.status(400).json({ success: false, message: "Image is required" });
+    }
 
     const parsedOptions = typeof options === "string" ? JSON.parse(options) : options;
-    if (!Array.isArray(parsedOptions) || parsedOptions.length < 2)
+    console.log("[IMAGE_QUESTION] Parsed options:", parsedOptions);
+    
+    if (!Array.isArray(parsedOptions) || parsedOptions.length < 2) {
+      console.log("[IMAGE_QUESTION] ❌ Invalid options format");
       return res.status(400).json({ success: false, message: "At least 2 options required" });
+    }
 
-    if (!parsedOptions.includes(answer))
+    if (!parsedOptions.includes(answer)) {
+      console.log("[IMAGE_QUESTION] ❌ Answer not in options");
       return res.status(400).json({ success: false, message: "Answer must be one of the options" });
+    }
 
     // Upload image to Cloudinary
+    console.log("[IMAGE_QUESTION] 📤 Uploading to Cloudinary...");
     const uploadResult = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         { folder: "quiz_images" },
-        (error, result) => (error ? reject(error) : resolve(result))
+        (error, result) => {
+          if (error) {
+            console.log("[IMAGE_QUESTION] ❌ Cloudinary error:", error);
+            reject(error);
+          } else {
+            console.log("[IMAGE_QUESTION] ✅ Cloudinary upload success");
+            console.log("[IMAGE_QUESTION]    URL:", result.secure_url);
+            resolve(result);
+          }
+        }
       );
       stream.end(req.file.buffer);
     });
 
-    // Fetch the first quiz (assume single document for now)
+    // Fetch the first quiz document
+    console.log("[IMAGE_QUESTION] 🔍 Searching for existing Quiz document...");
     let quiz = await Quiz.findOne();
-    if (!quiz) quiz = await Quiz.create({ categories: [] });
+    
+    if (!quiz) {
+      console.log("[IMAGE_QUESTION] 📝 No Quiz found, creating new one");
+      console.log("[IMAGE_QUESTION]    Category: " + category);
+      console.log("[IMAGE_QUESTION]    Subcategory: " + subcategory);
+      
+      quiz = await Quiz.create({ 
+        categories: [{ 
+          category, 
+          subcategory, 
+          questions: [
+            {
+              question: "",
+              image: uploadResult.secure_url,
+              description: description || "",
+              options: parsedOptions,
+              answer,
+              type: "image",
+            }
+          ] 
+        }] 
+      });
+      console.log("[IMAGE_QUESTION] ✅ New Quiz created");
+      console.log("[IMAGE_QUESTION]    ID: " + quiz.id);
+      console.log("[IMAGE_QUESTION]    Categories: " + JSON.stringify(quiz.categories));
+    } else {
+      console.log("[IMAGE_QUESTION] ✅ Found existing Quiz ID: " + quiz.id);
+      console.log("[IMAGE_QUESTION] Current categories count: " + (quiz.categories?.length || 0));
+      
+      // Check if category exists
+      let categoryIndex = quiz.categories.findIndex((c) => c.category === category);
+      console.log("[IMAGE_QUESTION] Category '" + category + "' found at index: " + categoryIndex);
 
-    // Check if category exists
-    let catIndex = quiz.categories.findIndex(
-      (c) => c.category === category && c.subcategory === subcategory
-    );
+      if (categoryIndex === -1) {
+        // Category doesn't exist - create new
+        console.log("[IMAGE_QUESTION] 📝 Category not found, creating new");
+        quiz.categories.push({ 
+          category, 
+          subcategory, 
+          questions: [
+            {
+              question: "",
+              image: uploadResult.secure_url,
+              description: description || "",
+              options: parsedOptions,
+              answer,
+              type: "image",
+            }
+          ]
+        });
+        categoryIndex = quiz.categories.length - 1;
+        console.log("[IMAGE_QUESTION] ✅ New category added at index: " + categoryIndex);
+      } else {
+        // Category exists - check subcategory
+        console.log("[IMAGE_QUESTION] Category exists, checking subcategory...");
+        console.log("[IMAGE_QUESTION] Current subcategory: " + quiz.categories[categoryIndex].subcategory);
+        
+        if (quiz.categories[categoryIndex].subcategory !== subcategory) {
+          console.log("[IMAGE_QUESTION] 📝 Subcategory different, creating new category entry");
+          quiz.categories.push({ 
+            category, 
+            subcategory, 
+            questions: [
+              {
+                question: "",
+                image: uploadResult.secure_url,
+                description: description || "",
+                options: parsedOptions,
+                answer,
+                type: "image",
+              }
+            ]
+          });
+          categoryIndex = quiz.categories.length - 1;
+          console.log("[IMAGE_QUESTION] ✅ New subcategory entry added");
+        } else {
+          console.log("[IMAGE_QUESTION] ✅ Category/subcategory match found, adding question");
+          quiz.categories[categoryIndex].questions.push({
+            question: "",
+            image: uploadResult.secure_url,
+            description: description || "",
+            options: parsedOptions,
+            answer,
+            type: "image",
+          });
+          console.log("[IMAGE_QUESTION]    Total questions now: " + quiz.categories[categoryIndex].questions.length);
+        }
+      }
 
-    if (catIndex === -1) {
-      quiz.categories.push({ category, subcategory, questions: [] });
-      catIndex = quiz.categories.length - 1;
+      console.log("[IMAGE_QUESTION] Final data structure:");
+      console.log("[IMAGE_QUESTION]    Total categories: " + quiz.categories.length);
+      quiz.categories.forEach((cat, idx) => {
+        console.log("[IMAGE_QUESTION]    Category " + (idx + 1) + ": " + cat.category + " / " + cat.subcategory + " (" + (cat.questions?.length || 0) + " questions)");
+      });
+      
+      // ✅ CRITICAL: Mark categories field as changed for Sequelize
+      console.log("[IMAGE_QUESTION] 💾 Marking 'categories' as changed before save...");
+      quiz.changed('categories', true);
+      
+      console.log("[IMAGE_QUESTION] 💾 Saving to database...");
+      const savedQuiz = await quiz.save({ fields: ['categories', 'updatedAt'] });
+      console.log("[IMAGE_QUESTION] ✅ Quiz saved successfully!");
+      console.log("[IMAGE_QUESTION]    Saved categories count: " + (savedQuiz.categories?.length || 0));
     }
 
-    // Add question
-    quiz.categories[catIndex].questions.push({
-      question: "",
-      image: uploadResult.secure_url,
-      description: description || "",
-      options: parsedOptions,
-      answer,
-      type: "image",
-    });
-
-    await quiz.save();
+    // Verify save by fetching from DB
+    console.log("[IMAGE_QUESTION] 🔍 Verifying saved data from database...");
+    const verify = await Quiz.findByPk(quiz.id);
+    if (!verify) {
+      console.log("[IMAGE_QUESTION] ❌ CRITICAL: Quiz not found in DB after save!");
+      console.log("=".repeat(80));
+      return res.status(500).json({ success: false, message: "Save verification failed" });
+    }
+    
+    console.log("[IMAGE_QUESTION] ✅ Quiz found in DB");
+    console.log("[IMAGE_QUESTION] DB categories count: " + (verify.categories?.length || 0));
+    
+    const verifyCount = verify?.categories?.find(c => c.category === category && c.subcategory === subcategory)?.questions?.length || 0;
+    console.log("[IMAGE_QUESTION] Questions in DB for " + category + "/" + subcategory + ": " + verifyCount);
+    
+    if (verifyCount > 0) {
+      console.log("[IMAGE_QUESTION] 🎉 DATA SUCCESSFULLY STORED IN DATABASE!");
+    } else {
+      console.log("[IMAGE_QUESTION] ⚠️ WARNING: Data not found in database verification!");
+    }
+    
+    console.log("=== [IMAGE_QUESTION] END ===");
+    console.log("=".repeat(80) + "\n");
 
     res.status(201).json({
       success: true,
       message: "Image question added successfully",
       data: quiz,
+      quizId: quiz.id,
     });
   } catch (err) {
-    console.error("Error adding image question:", err);
+    console.error("[IMAGE_QUESTION] ❌ CRITICAL ERROR:", err);
+    console.error("[IMAGE_QUESTION] Error message:", err.message);
+    console.error("[IMAGE_QUESTION] Error stack:", err.stack);
+    console.log("=".repeat(80) + "\n");
     res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
@@ -162,7 +301,25 @@ export const createQuiz = async (req, res) => {
 
     if (!isValid) return res.status(400).json({ success: false, message: "Invalid category or question format" });
 
-    const quiz = await Quiz.create({ categories });
+    // Check if a Quiz document already exists (for merging CSV + image questions)
+    let quiz = await Quiz.findOne();
+    if (quiz) {
+      console.log("[CSV_UPLOAD] Merging with existing quiz document ID:", quiz.id);
+      // Merge new categories with existing ones
+      categories.forEach(newCat => {
+        const existingCatIdx = quiz.categories.findIndex(c => c.category === newCat.category && c.subcategory === newCat.subcategory);
+        if (existingCatIdx === -1) {
+          quiz.categories.push(newCat);
+        } else {
+          quiz.categories[existingCatIdx].questions.push(...newCat.questions);
+        }
+      });
+      quiz.changed('categories', true);  // ✅ Mark categories as changed for Sequelize
+      await quiz.save();
+    } else {
+      console.log("[CSV_UPLOAD] Creating new quiz document");
+      quiz = await Quiz.create({ categories });
+    }
 
     res.status(201).json({ success: true, message: "Questions added successfully", data: quiz });
   } catch (err) {
@@ -200,36 +357,99 @@ export const getGroupedCategories = async (req, res) => {
 export const createQuizByFaculty = async (req, res) => {
   try {
     const { csvData, facultyId, session } = req.body;
-    if (!csvData) return res.status(400).json({ success: false, message: "CSV data is required" });
+    console.log("\n=== [CSV_UPLOAD] START ===");
+    console.log("[CSV_UPLOAD] facultyId:", facultyId);
+    console.log("[CSV_UPLOAD] session:", session);
 
+    if (!csvData) {
+      console.log("[CSV_UPLOAD] ❌ No CSV data provided");
+      return res.status(400).json({ success: false, message: "CSV data is required" });
+    }
+
+    console.log("[CSV_UPLOAD] 📥 Parsing CSV data...");
     const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
-    if (!parsed.data?.length) return res.status(400).json({ success: false, message: "CSV is empty or invalid" });
+    console.log("[CSV_UPLOAD] Parsed rows:", parsed.data?.length || 0);
+    
+    if (!parsed.data?.length) {
+      console.log("[CSV_UPLOAD] ❌ CSV is empty or invalid");
+      return res.status(400).json({ success: false, message: "CSV is empty or invalid" });
+    }
 
     const categoriesMap = {};
+    let validRows = 0;
 
-    parsed.data.forEach((row) => {
+    parsed.data.forEach((row, idx) => {
       const category = row.Category || row.category;
       const subcategory = row.Subcategory || row.subcategory || "General";
       const question = row.Question || row.question;
       const optionsRaw = row.Options || row.options;
       const answer = row.Answer || row.answer;
 
-      if (!category || !subcategory || !question || !optionsRaw || !answer) return;
-      const options = optionsRaw.split(",").map(o => o.trim());
-      if (!options.includes(answer.trim())) return;
+      if (!category || !subcategory || !question || !optionsRaw || !answer) {
+        console.log(`[CSV_UPLOAD] ⚠️ Row ${idx + 1} missing fields, skipping`);
+        return;
+      }
 
+      const options = optionsRaw.split(",").map(o => o.trim());
+      if (!options.includes(answer.trim())) {
+        console.log(`[CSV_UPLOAD] ⚠️ Row ${idx + 1} answer not in options, skipping`);
+        return;
+      }
+
+      validRows++;
       const key = `${category}::${subcategory}`;
-      if (!categoriesMap[key]) categoriesMap[key] = { category, subcategory, questions: [] };
+      if (!categoriesMap[key]) {
+        console.log(`[CSV_UPLOAD] 📝 New category/subcategory: ${category} / ${subcategory}`);
+        categoriesMap[key] = { category, subcategory, questions: [] };
+      }
 
       categoriesMap[key].questions.push({ question: question.trim(), options, answer: answer.trim() });
     });
 
+    console.log("[CSV_UPLOAD] ✅ Valid rows processed:", validRows);
     const categories = Object.values(categoriesMap);
+    console.log("[CSV_UPLOAD] Total categories:", categories.length);
+    
+    categories.forEach((cat, idx) => {
+      console.log(`[CSV_UPLOAD]   Category ${idx + 1}: ${cat.category} / ${cat.subcategory} - ${cat.questions.length} questions`);
+    });
 
-    const quiz = await Quiz.create({ categories, createdBy: facultyId, session });
+    let quiz = await Quiz.findOne();
+    if (quiz) {
+      console.log("[CSV_UPLOAD] 📝 Merging with existing Quiz document ID:", quiz.id);
+      categories.forEach(newCat => {
+        const existingCatIdx = quiz.categories.findIndex(c => c.category === newCat.category && c.subcategory === newCat.subcategory);
+        if (existingCatIdx === -1) {
+          quiz.categories.push(newCat);
+          console.log(`[CSV_UPLOAD] ✅ Added new category: ${newCat.category} / ${newCat.subcategory}`);
+        } else {
+          quiz.categories[existingCatIdx].questions.push(...newCat.questions);
+          console.log(`[CSV_UPLOAD] ✅ Merged ${newCat.questions.length} questions into: ${newCat.category} / ${newCat.subcategory}`);
+        }
+      });
+      quiz.createdBy = facultyId;
+      quiz.session = session;
+      // ✅ CRITICAL: Mark categories field as changed for Sequelize
+      quiz.changed('categories', true);
+      await quiz.save({ fields: ['categories', 'createdBy', 'session'] });
+      console.log("[CSV_UPLOAD] ✅ Quiz merged and saved successfully!");
+    } else {
+      console.log("[CSV_UPLOAD] 📝 No existing Quiz, creating new one...");
+      quiz = await Quiz.create({ categories, createdBy: facultyId, session });
+      console.log("[CSV_UPLOAD] ✅ New Quiz created with ID:", quiz.id);
+    }
+
+    const verify = await Quiz.findByPk(quiz.id);
+    console.log("[CSV_UPLOAD] 🔍 Verification - Total categories:", verify?.categories?.length || 0);
+    verify?.categories?.forEach(cat => {
+      console.log(`[CSV_UPLOAD]   - ${cat.category} / ${cat.subcategory}: ${cat.questions?.length || 0} questions`);
+    });
+    console.log("=== [CSV_UPLOAD] END ===\n");
+
     res.status(201).json({ success: true, message: "Quiz created successfully from CSV", data: quiz });
   } catch (err) {
-    console.error("CSV Quiz creation error:", err);
+    console.error("[CSV_UPLOAD] ❌ ERROR:", err);
+    console.error("[CSV_UPLOAD] Error stack:", err.stack);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -385,17 +605,35 @@ export const updateQuizConfig = async (req, res) => {
 // ---------------- Get all categories and subcategories ----------------
 export const getAllCategoriesAndSubcategories = async (req, res) => {
   try {
+    console.log("\n=== [CATEGORIES] FETCH START ===");
+    console.log("[CATEGORIES] 🔍 Searching all Quiz documents...");
+    
     const quizzes = await Quiz.findAll();
+    console.log("[CATEGORIES] ✅ Found " + quizzes.length + " quiz document(s)");
+    
     const grouped = {};
 
-    quizzes.forEach((quiz) => {
+    quizzes.forEach((quiz, idx) => {
+      console.log("[CATEGORIES] Quiz " + (idx + 1) + ":");
+      
+      if (!quiz.categories || !Array.isArray(quiz.categories)) {
+        console.log("[CATEGORIES]   ⚠️ Categories field missing or not an array");
+        return;
+      }
+      
+      console.log("[CATEGORIES]   Total categories: " + quiz.categories.length);
+      
       quiz.categories.forEach((cat) => {
+        const questionCount = Array.isArray(cat.questions) ? cat.questions.length : 0;
+        console.log("[CATEGORIES]     - " + cat.category + " / " + cat.subcategory + ": " + questionCount + " questions");
+        
         if (!grouped[cat.category]) grouped[cat.category] = {};
         if (!grouped[cat.category][cat.subcategory]) grouped[cat.category][cat.subcategory] = 0;
-        grouped[cat.category][cat.subcategory] += cat.questions.length;
+        grouped[cat.category][cat.subcategory] += questionCount;
       });
     });
 
+    console.log("[CATEGORIES] 📊 Building response...");
     const data = Object.entries(grouped).flatMap(([category, subcats]) =>
       Object.entries(subcats).map(([subcategory, totalQuestionsAvailable]) => ({
         category,
@@ -406,10 +644,16 @@ export const getAllCategoriesAndSubcategories = async (req, res) => {
 
     data.sort((a, b) => a.category.localeCompare(b.category) || a.subcategory.localeCompare(b.subcategory));
 
+    console.log("[CATEGORIES] ✅ Returning " + data.length + " category/subcategory combinations");
+    data.forEach(d => {
+      console.log("[CATEGORIES]   ✓ " + d.category + " / " + d.subcategory + " (" + d.totalQuestionsAvailable + " questions)");
+    });
+    console.log("=== [CATEGORIES] FETCH END ===\n");
+
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("[CATEGORIES] ❌ Error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -516,6 +760,7 @@ export const blockStudent = async (req, res) => {
 
     const newBlock = {
       studentId: Number(studentId),
+      createdAt: now.toISOString(),
       expiresAt: expiresAt.toISOString()
     };
 
@@ -699,6 +944,8 @@ export const getQuiz = async (req, res) => {
       return res.status(404).json({ success: false, message: "QuizConfig not found" });
     }
 
+    console.log("[GET QUIZ] QuizConfig timeLimit:", quizConfig.timeLimit, "Type:", typeof quizConfig.timeLimit);
+
     // ================= FETCH / CREATE PROGRESS =================
     let progress = await QuizProgress.findOne({
       where: { studentId, quizId },
@@ -764,6 +1011,9 @@ export const getQuiz = async (req, res) => {
               id,
               question: q.question,
               options: q.options,
+              image: q.image || null,
+              description: q.description || null,
+              type: q.type || "text",
               selectedOption:
                 savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
             }));
@@ -828,6 +1078,9 @@ export const getQuiz = async (req, res) => {
             id,
             question: q.question,
             options: q.options,
+            image: q.image || null,
+            description: q.description || null,
+            type: q.type || "text",
             selectedOption:
               savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
           }));
@@ -838,6 +1091,42 @@ export const getQuiz = async (req, res) => {
         });
       });
 
+      // ✅ Calculate time penalty: time that passed during block expiration
+      let adjustedTimeLeft = progress.timeLeft;
+      
+      // Find the block that just expired (it's in original blocked array but not in activeBlocks)
+      const expiredBlock = blocked.find(b => {
+        if (Number(b.studentId) !== Number(studentId)) return false;
+        if (!b.expiresAt) return false;
+        const expiry = new Date(b.expiresAt).getTime();
+        return expiry <= now;  // ✅ This is the expired block
+      });
+      
+      if (expiredBlock) {
+        console.log("[BLOCK PENALTY] Found expired block for student");
+        console.log("[BLOCK PENALTY] Block createdAt:", expiredBlock.createdAt);
+        console.log("[BLOCK PENALTY] Block expiresAt:", expiredBlock.expiresAt);
+        
+        // Calculate elapsed time in seconds
+        let blockStartTime = now - 30000;  // Default: 30 seconds before now
+        if (expiredBlock.createdAt) {
+          blockStartTime = new Date(expiredBlock.createdAt).getTime();
+        }
+        const elapsedSeconds = Math.ceil((now - blockStartTime) / 1000);
+        
+        console.log("[BLOCK PENALTY] Elapsed time during block:", elapsedSeconds, "seconds");
+        console.log("[BLOCK PENALTY] TimeLeft BEFORE penalty:", progress.timeLeft, "seconds");
+        
+        // Apply penalty
+        adjustedTimeLeft = Math.max(0, progress.timeLeft - elapsedSeconds);
+        console.log("[BLOCK PENALTY] TimeLeft AFTER penalty:", adjustedTimeLeft, "seconds");
+        
+        // Save adjusted timeLeft
+        progress.timeLeft = adjustedTimeLeft;
+        await progress.save();
+        console.log("[BLOCK PENALTY] ✅ Saved adjusted timeLeft to database");
+      }
+
       return res.json({
         success: true,
         blocked: false,
@@ -847,7 +1136,7 @@ export const getQuiz = async (req, res) => {
           selectionsWithQuestions,
           progress: {
             currentQuestionIndex: progress.currentQuestionIndex,
-            timeLeft: progress.timeLeft,
+            timeLeft: adjustedTimeLeft,
             completed: progress.completed,
             answers: savedAnswers,
           },
@@ -857,11 +1146,19 @@ export const getQuiz = async (req, res) => {
     }
 
     // ================= GENERATE QUESTIONS (FIRST TIME ONLY) =================
+    console.log("\n[GET_QUIZ] 📊 GENERATING UNIQUE QUESTIONS FOR STUDENT");
+    console.log("[GET_QUIZ]   Seed: " + quizId + "_" + studentId + " (deterministic)");
+    console.log("[GET_QUIZ]   🎯 Different students = different questions");
+    console.log("[GET_QUIZ]   🔒 Same student = same questions on refresh");
+    
     const allQuizzes = await Quiz.findAll();
+    console.log("[GET_QUIZ] Found " + allQuizzes.length + " Quiz document(s)");
+    
     const selectionsWithQuestions = {};
     const questionMap = {};
 
     for (const selection of quizConfig.selections) {
+      console.log("\n[GET_QUIZ] Processing: " + selection.subcategory + " (need " + selection.questionCount + " questions)");
       let pool = [];
 
       allQuizzes.forEach(qz => {
@@ -876,14 +1173,39 @@ export const getQuiz = async (req, res) => {
         });
       });
 
-      // Deduplicate
+      console.log("[GET_QUIZ]   Pool size (before dedup): " + pool.length);
+
+      // Deduplicate - include image in key for image questions
       pool = Array.from(
-        new Map(pool.map(q => [q.question + JSON.stringify(q.options), q])).values()
+        new Map(pool.map(q => {
+          // For image questions, use image URL as part of key
+          // For text questions, use question text
+          const key = q.type === "image" 
+            ? (q.image || "") + JSON.stringify(q.options)
+            : q.question + JSON.stringify(q.options);
+          return [key, q];
+        })).values()
       );
+      
+      console.log("[GET_QUIZ]   Pool size (after dedup): " + pool.length);
+      console.log("[GET_QUIZ]   Pool content:");
+      pool.forEach((q, idx) => {
+        console.log("[GET_QUIZ]     Q" + (idx + 1) + ": type=" + q.type + ", image=" + (q.image ? "✅" : "❌") + ", question=" + (q.question ? "'" + q.question.substring(0, 30) + "...'" : "(empty)"));
+      });
+
+      if (pool.length === 0) {
+        console.log("[GET_QUIZ]   ⚠️ No questions found!");
+        continue;
+      }
 
       // Seeded shuffle → same questions after refresh
-      const shuffled = seededShuffle(pool, `${quizId}_${studentId}`);
+      const seed = quizId + "_" + studentId;
+      console.log("[GET_QUIZ]   Seed: " + seed);
+      const shuffled = seededShuffle(pool, seed);
       const selected = shuffled.slice(0, selection.questionCount);
+      
+      console.log("[GET_QUIZ]   Selected " + selected.length + " questions");
+      console.log("[GET_QUIZ]   ✅ Questions LOCKED for Student ID: " + studentId);
 
       selectionsWithQuestions[selection.subcategory] = selected.map(q => {
         const id = generateQuestionId(selection.subcategory, q.question);
@@ -893,16 +1215,26 @@ export const getQuiz = async (req, res) => {
           question: q.question,
           options: q.options,
           answer: q.answer,
+          image: q.image || null,
+          description: q.description || null,
+          type: q.type || "text",
         };
+
+        console.log("[GET_QUIZ]   Selected Q: type=" + q.type + ", image=" + (q.image ? "✅ YES" : "❌ NO"));
 
         return {
           id,
           question: q.question,
           options: q.options,
+          image: q.image || null,
+          description: q.description || null,
+          type: q.type || "text",
           selectedOption: null,
         };
       });
     }
+    
+    console.log("\n[GET_QUIZ] 🔐 Student question mapping complete - questions are deterministic per student");
 
     // ================= SAVE QUESTION MAP =================
     progress.questionMap = questionMap;
@@ -1070,6 +1402,8 @@ export const createQuizConfig = async (req, res) => {
   const { title, category, timeLimit, selections, facultyId } = req.body;
 
   console.log("📦 Request Body:", req.body);
+  console.log("⏳ TimeLimit received:", timeLimit, "Type:", typeof timeLimit);
+  console.log("⏳ TimeLimit after parseInt:", parseInt(timeLimit, 10));
 
   if (!facultyId) {
     console.log("❌ facultyId missing");
@@ -1090,7 +1424,7 @@ export const createQuizConfig = async (req, res) => {
       id: shaId,
       title,
       category,
-      timeLimit,
+      timeLimit: parseInt(timeLimit, 10), // ✅ Ensure it's an integer
       selections,
       facultyId,
       createdBy: facultyId
@@ -1140,3 +1474,47 @@ export const getQuizTitleById = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error while fetching quiz title" });
   }
 };
+
+// ✅ Diagnostic endpoint to check database content
+export const diagnoseDatabase = async (req, res) => {
+  try {
+    const quizzes = await Quiz.findAll();
+    const quizConfigs = await QuizConfig.findAll({ attributes: ["id", "title", "selections"] });
+    
+    const quizzesSummary = quizzes.map(q => ({
+      id: q.id,
+      categories: q.categories?.map(cat => ({
+        category: cat.category,
+        subcategory: cat.subcategory,
+        questions: cat.questions?.length || 0,
+        firstQuestionType: cat.questions?.[0]?.type || "unknown",
+        firstQuestionHasImage: !!cat.questions?.[0]?.image,
+        firstQuestionPreview: {
+          question: cat.questions?.[0]?.question?.substring(0, 20) || "(empty)",
+          image: cat.questions?.[0]?.image ? "✅" : "❌",
+          type: cat.questions?.[0]?.type || "text"
+        }
+      })) || []
+    }));
+
+    const quizConfigsSummary = quizConfigs.map(qc => ({
+      id: qc.id,
+      title: qc.title,
+      selections: qc.selections
+    }));
+
+    res.json({
+      success: true,
+      database: {
+        totalQuizzes: quizzes.length,
+        totalQuizConfigs: quizConfigs.length,
+        quizzes: quizzesSummary,
+        quizConfigs: quizConfigsSummary
+      }
+    });
+  } catch (err) {
+    console.error("[DIAGNOSE] Error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+

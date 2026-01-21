@@ -104,7 +104,7 @@ const connectDB = async () => {
     console.log("✅ MySQL connected");
 
     // Force sync to recreate missing tables (QuizConfig)
-    await sequelize.sync({ force: false, alter: true });
+    await sequelize.sync();
     console.log("✅ All tables synced");
 
     await seedFaculty();

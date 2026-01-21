@@ -83,7 +83,10 @@ Student.init(
         }
       },
       beforeUpdate: async (student) => {
-        if (student.changed("password")) {
+        // ✅ IMPORTANT: Only hash if password is being changed AND it's not already hashed
+        // Controllers already hash before calling update, so skip hook to avoid double-hashing
+        // Check if password looks like a hash (bcrypt hashes start with $2a$ or $2b$ or $2y$)
+        if (student.changed("password") && !student.password.startsWith("$2")) {
           const salt = await bcrypt.genSalt(10);
           student.password = await bcrypt.hash(student.password, salt);
         }
