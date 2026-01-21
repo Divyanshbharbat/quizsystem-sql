@@ -441,7 +441,7 @@ export const blockStudent = async (req, res) => {
 
     let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
 
-    // ✅ Remove expired
+    // ✅ Remove expired blocks and persist cleanup
     blocked = blocked.filter(b => new Date(b.expiresAt) > now);
 
     const existing = blocked.find(
@@ -469,6 +469,7 @@ export const blockStudent = async (req, res) => {
       expiresAt: expiresAt.toISOString() // ✅ JSON safe
     });
 
+    // ✅ Save the cleaned blocked array to database
     await quizConfig.update({ blocked });
 
     res.json({
@@ -667,6 +668,272 @@ import Faculty from "../models/Faculty.js";
 
 
 // ================= GET QUIZ =================
+// export const getQuiz = async (req, res) => {
+//   const { quizId } = req.params;
+//   const studentId = req.user?.id;
+
+//   if (!studentId) {
+//     return res.status(401).json({ success: false, message: "Unauthorized" });
+//   }
+
+ 
+
+//   try {
+//     // Fetch quiz config with faculty
+//     const quizConfig = await QuizConfig.findByPk(quizId, {
+//       include: {
+//         model: Faculty,
+//         as: "faculty",
+//         attributes: ["id", "name", "email", "department"],
+//       },
+//     });
+
+//     if (!quizConfig) {
+//       return res.status(404).json({ success: false, message: "QuizConfig not found" });
+//     }
+
+//     // Ensure blocked array exists
+//     quizConfig.blocked = quizConfig.blocked || [];
+
+//     // Remove expired blocks
+//     const now = new Date();
+//     quizConfig.blocked = quizConfig.blocked.filter(
+//       (block) => block.expiresAt && new Date(block.expiresAt) > now
+//     );
+
+//     await quizConfig.update({ blocked: quizConfig.blocked });
+
+//     // Check if student is blocked
+//     const existingBlock = quizConfig.blocked.find((b) => b.studentId === studentId);
+//     if (existingBlock) {
+//       const remainingSeconds = Math.ceil(
+//         (new Date(existingBlock.expiresAt) - now) / 1000
+//       );
+
+     
+
+//       return res.json({
+//         success: true,
+//         message: "Quiz fetched successfully",
+//         blocked: true,
+//         remainingSeconds,
+//         data: {
+//           quizConfig: {
+//             id: quizConfig.id,
+//             title: quizConfig.title,
+//             category: quizConfig.category,
+//             timeLimit: quizConfig.timeLimit,
+//             selections: quizConfig.selections,
+//             createdBy: quizConfig.faculty,
+//           },
+//           selectionsWithQuestions: [],
+//           progress: {
+//             currentQuestionIndex: 0,
+//             timeLeft: 0,
+//             completed: false,
+//             answers: [],
+//           },
+//           serverTime: Date.now(),
+//         },
+//       });
+//     }
+
+//     // Find or create progress
+//     let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
+//     if (!progress) {
+//       try {
+//         progress = await QuizProgress.create({
+//           studentId,
+//           quizId,
+//           currentQuestionIndex: 0,
+//           completed: false,
+//           status: false,
+//           timeLeft: quizConfig.timeLimit * 60,
+//           answers: [],
+//         });
+//         console.log(`[DEBUG] Created new progress for student ${studentId}`);
+//       } catch (createErr) {
+//         // If it fails due to duplicate, fetch the existing record
+//         if (createErr.name === 'SequelizeUniqueConstraintError') {
+//           console.log(`[DEBUG] Progress already exists, fetching existing record for student ${studentId}`);
+//           progress = await QuizProgress.findOne({ where: { studentId, quizId } });
+//           if (!progress) {
+//             throw new Error(`[CRITICAL] Failed to fetch existing progress for student ${studentId}`);
+//           }
+//         } else {
+//           throw createErr;
+//         }
+//       }
+//     } else {
+//       console.log(`[DEBUG] Existing progress found:`, progress.answers);
+//     }
+
+//     // Safety check
+//     if (!progress) {
+//       return res.status(500).json({ success: false, message: "Failed to initialize quiz progress" });
+//     }
+
+//     const savedAnswers = progress.answers || [];
+//     const selectionsWithQuestions = [];
+
+    
+
+//     const allQuizzes = await Quiz.findAll();
+   
+
+//     allQuizzes.forEach((quiz, idx) => {
+//       console.log(`[DEBUG] Quiz ${idx}:`, {
+//         id: quiz.id,
+//         categoriesCount: quiz.categories?.length || 0,
+//         categories: quiz.categories?.map(c => ({
+//           category: c.category,
+//           subcategory: c.subcategory,
+//           questionCount: c.questions?.length || 0
+//         }))
+//       });
+//     });
+
+//     for (const selection of quizConfig.selections) {
+//       let questions = [];
+
+     
+
+//       allQuizzes.forEach((quiz, quizIdx) => {
+//         let categories = [];
+//         try {
+//           categories = Array.isArray(quiz.categories) ? quiz.categories : JSON.parse(quiz.categories);
+//         } catch (err) {
+//           console.error(`[ERROR] Invalid categories JSON for quiz ${quiz.id}:`, err.message);
+//           return;
+//         }
+
+       
+
+//         categories.forEach((cat, catIdx) => {
+//           console.log(`[DEBUG]     Category ${catIdx}: "${cat.category}" / "${cat.subcategory}"`);
+//           console.log(`[DEBUG]       Comparing "${cat.subcategory}" === "${selection.subcategory}" ? ${cat.subcategory === selection.subcategory}`);
+//           console.log(`[DEBUG]       Questions array is array? ${Array.isArray(cat.questions)}`);
+//           console.log(`[DEBUG]       Questions length: ${cat.questions?.length || 0}`);
+
+//           if (cat.subcategory === selection.subcategory && Array.isArray(cat.questions)) {
+//             console.log(`[DEBUG]   ✅ MATCH! Adding ${cat.questions.length} questions`);
+//             questions.push(...cat.questions);
+//           }
+//         });
+//       });
+
+   
+
+//       // Remove duplicate questions by text
+//       const uniqueQuestions = Array.from(
+//         new Map(
+//           questions
+//             .filter((q) => {
+//               const isValid = q && q.question && Array.isArray(q.options);
+//               if (!isValid) console.log(`[DEBUG]   Filtered out question:`, q);
+//               return isValid;
+//             })
+//             .map((q) => [q.question, q])
+//         ).values()
+//       );
+
+     
+
+//       // Shuffle
+//       const shuffled = seededShuffle(uniqueQuestions, studentId);
+
+//       const selectedQuestions = shuffled.slice(0, selection.questionCount);
+
+
+//       // Map saved answers - use a consistent question ID based on question text
+//       const questionsForStudent = selectedQuestions.map((q, index) => {
+//         // Create a consistent ID based on question text hash
+//         const questionId = `${selection.subcategory}_${index}`;
+//         const savedAnswer = savedAnswers.find((a) => a.questionId === questionId);
+        
+//         return {
+//           id: questionId,
+//           question: q.question,
+//           options: q.options,
+//           answer: q.answer,
+//           selectedOption: savedAnswer?.selectedOption ?? null,
+//         };
+//       });
+
+//       console.log(`[DEBUG] Final questions for student in "${selection.subcategory}": ${questionsForStudent.length}`);
+      
+//       // 🔴 LOG WHAT WE'RE SENDING TO FRONTEND
+//       console.log(`[DEBUG] Sending ${selection.subcategory} questions to student ${studentId}:`);
+//       questionsForStudent.forEach((q, idx) => {
+//         console.log(`[DEBUG]   Q${idx} (ID: ${q.id}): "${q.question}"`);
+//         console.log(`[DEBUG]     Options: ${JSON.stringify(q.options)}`);
+//         console.log(`[DEBUG]     Correct Answer: "${q.answer}"`);
+//         console.log(`[DEBUG]     Student's saved answer: "${q.selectedOption}"`);
+//       });
+
+//       selectionsWithQuestions.push({
+//         subcategory: selection.subcategory,
+//         questions: questionsForStudent,
+//       });
+//     }
+
+ 
+
+//     // 🔴 Store the questionMap in progress for consistent scoring
+//     const questionMapForStorage = {};
+//     selectionsWithQuestions.forEach(selection => {
+//       selection.questions.forEach(q => {
+//         questionMapForStorage[q.id] = {
+//           question: q.question,
+//           options: q.options,
+//           answer: q.answer
+//         };
+//       });
+//     });
+
+//     // Update progress with the questionMap
+//     progress.questionMap = questionMapForStorage;
+//     await progress.save();
+//     console.log(`[DEBUG] Stored questionMap with ${Object.keys(questionMapForStorage).length} questions in QuizProgress`);
+
+//     return res.json({
+//       success: true,
+//       message: "Quiz fetched successfully",
+//       blocked: false,
+//       remainingSeconds: 0,
+//       data: {
+//         quizConfig: {
+//           id: quizConfig.id,
+//           title: quizConfig.title,
+//           category: quizConfig.category,
+//           timeLimit: quizConfig.timeLimit,
+//           selections: quizConfig.selections,
+//           createdBy: quizConfig.faculty,
+//         },
+//         selectionsWithQuestions,
+//         progress: {
+//           currentQuestionIndex: progress.currentQuestionIndex,
+//           timeLeft: progress.timeLeft,
+//           completed: progress.completed,
+//           answers: savedAnswers,
+//         },
+//         serverTime: Date.now(),
+//       },
+//     });
+//   } catch (err) {
+//     console.error("[ERROR] getQuiz error:", err);
+//     return res.status(500).json({ success: false, message: err.message });
+//   }
+// };
+import crypto from "crypto";
+
+const generateQuestionId = (subcategory, question) => {
+  return crypto
+    .createHash("sha256")
+    .update(subcategory + question)
+    .digest("hex");
+};
+
 export const getQuiz = async (req, res) => {
   const { quizId } = req.params;
   const studentId = req.user?.id;
@@ -675,10 +942,7 @@ export const getQuiz = async (req, res) => {
     return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
-  console.log(`[DEBUG] getQuiz called for student: ${studentId}, quiz: ${quizId}`);
-
   try {
-    // Fetch quiz config with faculty
     const quizConfig = await QuizConfig.findByPk(quizId, {
       include: {
         model: Faculty,
@@ -691,45 +955,35 @@ export const getQuiz = async (req, res) => {
       return res.status(404).json({ success: false, message: "QuizConfig not found" });
     }
 
-    // Ensure blocked array exists
-    quizConfig.blocked = quizConfig.blocked || [];
+    // ================= PROGRESS (FETCH EARLY) =================
+    let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
 
-    // Remove expired blocks
-    const now = new Date();
-    quizConfig.blocked = quizConfig.blocked.filter(
-      (block) => block.expiresAt && new Date(block.expiresAt) > now
-    );
+    if (!progress) {
+      progress = await QuizProgress.create({
+        studentId,
+        quizId,
+        currentQuestionIndex: 0,
+        completed: false,
+        status: false,
+        timeLeft: quizConfig.timeLimit * 60,
+        answers: [],
+        questionMap: {},
+      });
+    }
 
-    await quizConfig.update({ blocked: quizConfig.blocked });
-
-    // Check if student is blocked
-    const existingBlock = quizConfig.blocked.find((b) => b.studentId === studentId);
-    if (existingBlock) {
-      const remainingSeconds = Math.ceil(
-        (new Date(existingBlock.expiresAt) - now) / 1000
-      );
-
-      console.log(`[DEBUG] Student ${studentId} is blocked for ${remainingSeconds} more seconds`);
-
+    // ================= CHECK IF ALREADY COMPLETED =================
+    if (progress.completed === true) {
       return res.json({
         success: true,
-        message: "Quiz fetched successfully",
-        blocked: true,
-        remainingSeconds,
+        isCompleted: true,
+        message: "You have already completed this quiz",
         data: {
-          quizConfig: {
-            id: quizConfig.id,
-            title: quizConfig.title,
-            category: quizConfig.category,
-            timeLimit: quizConfig.timeLimit,
-            selections: quizConfig.selections,
-            createdBy: quizConfig.faculty,
-          },
+          quizConfig,
           selectionsWithQuestions: [],
           progress: {
             currentQuestionIndex: 0,
             timeLeft: 0,
-            completed: false,
+            completed: true,
             answers: [],
           },
           serverTime: Date.now(),
@@ -737,183 +991,164 @@ export const getQuiz = async (req, res) => {
       });
     }
 
-    // Find or create progress
-    let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
-    if (!progress) {
-      try {
-        progress = await QuizProgress.create({
-          studentId,
-          quizId,
-          currentQuestionIndex: 0,
-          completed: false,
-          status: false,
-          timeLeft: quizConfig.timeLimit * 60,
-          answers: [],
-        });
-        console.log(`[DEBUG] Created new progress for student ${studentId}`);
-      } catch (createErr) {
-        // If it fails due to duplicate, fetch the existing record
-        if (createErr.name === 'SequelizeUniqueConstraintError') {
-          console.log(`[DEBUG] Progress already exists, fetching existing record for student ${studentId}`);
-          progress = await QuizProgress.findOne({ where: { studentId, quizId } });
-          if (!progress) {
-            throw new Error(`[CRITICAL] Failed to fetch existing progress for student ${studentId}`);
-          }
-        } else {
-          throw createErr;
-        }
-      }
-    } else {
-      console.log(`[DEBUG] Existing progress found:`, progress.answers);
-    }
+    // ================= BLOCK CHECK =================
+    quizConfig.blocked = quizConfig.blocked || [];
+    const now = new Date();
 
-    // Safety check
-    if (!progress) {
-      return res.status(500).json({ success: false, message: "Failed to initialize quiz progress" });
+    quizConfig.blocked = quizConfig.blocked.filter(
+      b => b.expiresAt && new Date(b.expiresAt) > now
+    );
+    await quizConfig.update({ blocked: quizConfig.blocked });
+
+    const block = quizConfig.blocked.find(b => b.studentId === studentId);
+    if (block) {
+      const remainingSeconds = Math.ceil(
+        (new Date(block.expiresAt) - now) / 1000
+      );
+      const savedAnswers = progress.answers || [];
+      
+      // ✅ If student has questions stored, show them even while blocked (for re-login scenario)
+      let selectionsWithQuestions = [];
+      if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
+        quizConfig.selections.forEach(sel => {
+          const qs = Object.entries(progress.questionMap)
+            .filter(([id, q]) => q.subcategory === sel.subcategory)
+            .map(([id, q]) => ({
+              id,
+              question: q.question,
+              options: q.options,
+              selectedOption:
+                savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
+            }));
+
+          selectionsWithQuestions.push({
+            subcategory: sel.subcategory,
+            questions: qs,
+          });
+        });
+      }
+
+      return res.json({
+        success: true,
+        blocked: true,
+        remainingSeconds: remainingSeconds,
+        expiresAt: new Date(block.expiresAt).getTime(),
+        data: {
+          quizConfig,
+          selectionsWithQuestions,
+          progress: {
+            currentQuestionIndex: progress.currentQuestionIndex,
+            timeLeft: progress.timeLeft,
+            completed: progress.completed,
+            answers: savedAnswers,
+          },
+          serverTime: Date.now(),
+        },
+      });
     }
 
     const savedAnswers = progress.answers || [];
-    const selectionsWithQuestions = [];
 
-    console.log(`[DEBUG] QuizConfig selections:`, JSON.stringify(quizConfig.selections));
-    console.log(`[DEBUG] QuizConfig category:`, quizConfig.category);
+    // ================= REUSE QUESTIONS (CRITICAL FIX) =================
+    if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
+      const selectionsWithQuestions = [];
 
-    const allQuizzes = await Quiz.findAll();
-    console.log(`[DEBUG] Total quizzes in database:`, allQuizzes.length);
+      quizConfig.selections.forEach(sel => {
+        const qs = Object.entries(progress.questionMap)
+          .filter(([id, q]) => q.subcategory === sel.subcategory)
+          .map(([id, q]) => ({
+            id,
+            question: q.question,
+            options: q.options,
+            selectedOption:
+              savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
+          }));
 
-    allQuizzes.forEach((quiz, idx) => {
-      console.log(`[DEBUG] Quiz ${idx}:`, {
-        id: quiz.id,
-        categoriesCount: quiz.categories?.length || 0,
-        categories: quiz.categories?.map(c => ({
-          category: c.category,
-          subcategory: c.subcategory,
-          questionCount: c.questions?.length || 0
-        }))
+        selectionsWithQuestions.push({
+          subcategory: sel.subcategory,
+          questions: qs,
+        });
       });
-    });
+
+      return res.json({
+        success: true,
+        blocked: false,
+        remainingSeconds: 0,
+        data: {
+          quizConfig,
+          selectionsWithQuestions,
+          progress: {
+            currentQuestionIndex: progress.currentQuestionIndex,
+            timeLeft: progress.timeLeft,
+            completed: progress.completed,
+            answers: savedAnswers,
+          },
+          serverTime: Date.now(),
+        },
+      });
+    }
+
+    // ================= GENERATE QUESTIONS (ONCE) =================
+    const allQuizzes = await Quiz.findAll();
+    const selectionsWithQuestions = {};
+    const questionMap = {};
 
     for (const selection of quizConfig.selections) {
-      let questions = [];
+      let pool = [];
 
-      console.log(`[DEBUG] ========================================`);
-      console.log(`[DEBUG] Processing selection: ${selection.subcategory}, need ${selection.questionCount} questions`);
+      allQuizzes.forEach(qz => {
+        const categories = Array.isArray(qz.categories)
+          ? qz.categories
+          : JSON.parse(qz.categories);
 
-      allQuizzes.forEach((quiz, quizIdx) => {
-        let categories = [];
-        try {
-          categories = Array.isArray(quiz.categories) ? quiz.categories : JSON.parse(quiz.categories);
-        } catch (err) {
-          console.error(`[ERROR] Invalid categories JSON for quiz ${quiz.id}:`, err.message);
-          return;
-        }
-
-        console.log(`[DEBUG]   Quiz ${quizIdx} has ${categories.length} categories`);
-
-        categories.forEach((cat, catIdx) => {
-          console.log(`[DEBUG]     Category ${catIdx}: "${cat.category}" / "${cat.subcategory}"`);
-          console.log(`[DEBUG]       Comparing "${cat.subcategory}" === "${selection.subcategory}" ? ${cat.subcategory === selection.subcategory}`);
-          console.log(`[DEBUG]       Questions array is array? ${Array.isArray(cat.questions)}`);
-          console.log(`[DEBUG]       Questions length: ${cat.questions?.length || 0}`);
-
-          if (cat.subcategory === selection.subcategory && Array.isArray(cat.questions)) {
-            console.log(`[DEBUG]   ✅ MATCH! Adding ${cat.questions.length} questions`);
-            questions.push(...cat.questions);
+        categories.forEach(cat => {
+          if (cat.subcategory === selection.subcategory) {
+            pool.push(...cat.questions);
           }
         });
       });
 
-      console.log(`[DEBUG] Total questions found for "${selection.subcategory}": ${questions.length}`);
-
-      // Remove duplicate questions by text
-      const uniqueQuestions = Array.from(
-        new Map(
-          questions
-            .filter((q) => {
-              const isValid = q && q.question && Array.isArray(q.options);
-              if (!isValid) console.log(`[DEBUG]   Filtered out question:`, q);
-              return isValid;
-            })
-            .map((q) => [q.question, q])
-        ).values()
+      // Deduplicate
+      pool = Array.from(
+        new Map(pool.map(q => [q.question + JSON.stringify(q.options), q])).values()
       );
 
-      console.log(`[DEBUG] Unique questions after dedup: ${uniqueQuestions.length}`);
+      // 🔥 STRONG SEED (quizId + studentId)
+      const shuffled = seededShuffle(pool, `${quizId}_${studentId}`);
+      const selected = shuffled.slice(0, selection.questionCount);
 
-      // Shuffle
-      const shuffled = seededShuffle(uniqueQuestions, studentId);
+      selectionsWithQuestions[selection.subcategory] = selected.map(q => {
+        const id = generateQuestionId(selection.subcategory, q.question);
 
-      const selectedQuestions = shuffled.slice(0, selection.questionCount);
-
-      console.log(`[DEBUG] Selected ${selectedQuestions.length} questions for student`);
-
-      // Map saved answers - use a consistent question ID based on question text
-      const questionsForStudent = selectedQuestions.map((q, index) => {
-        // Create a consistent ID based on question text hash
-        const questionId = `${selection.subcategory}_${index}`;
-        const savedAnswer = savedAnswers.find((a) => a.questionId === questionId);
-        
-        return {
-          id: questionId,
+        questionMap[id] = {
+          subcategory: selection.subcategory,
           question: q.question,
           options: q.options,
           answer: q.answer,
-          selectedOption: savedAnswer?.selectedOption ?? null,
         };
-      });
 
-      console.log(`[DEBUG] Final questions for student in "${selection.subcategory}": ${questionsForStudent.length}`);
-      
-      // 🔴 LOG WHAT WE'RE SENDING TO FRONTEND
-      console.log(`[DEBUG] Sending ${selection.subcategory} questions to student ${studentId}:`);
-      questionsForStudent.forEach((q, idx) => {
-        console.log(`[DEBUG]   Q${idx} (ID: ${q.id}): "${q.question}"`);
-        console.log(`[DEBUG]     Options: ${JSON.stringify(q.options)}`);
-        console.log(`[DEBUG]     Correct Answer: "${q.answer}"`);
-        console.log(`[DEBUG]     Student's saved answer: "${q.selectedOption}"`);
-      });
-
-      selectionsWithQuestions.push({
-        subcategory: selection.subcategory,
-        questions: questionsForStudent,
+        return {
+          id,
+          question: q.question,
+          options: q.options,
+          selectedOption: null,
+        };
       });
     }
 
-    console.log(`[DEBUG] ========================================`);
-    console.log(`[DEBUG] Total selections with questions: ${selectionsWithQuestions.length}`);
-
-    // 🔴 Store the questionMap in progress for consistent scoring
-    const questionMapForStorage = {};
-    selectionsWithQuestions.forEach(selection => {
-      selection.questions.forEach(q => {
-        questionMapForStorage[q.id] = {
-          question: q.question,
-          options: q.options,
-          answer: q.answer
-        };
-      });
-    });
-
-    // Update progress with the questionMap
-    progress.questionMap = questionMapForStorage;
+    // ================= SAVE LOCKED QUESTIONS =================
+    progress.questionMap = questionMap;
     await progress.save();
-    console.log(`[DEBUG] Stored questionMap with ${Object.keys(questionMapForStorage).length} questions in QuizProgress`);
 
     return res.json({
       success: true,
-      message: "Quiz fetched successfully",
       blocked: false,
       remainingSeconds: 0,
       data: {
-        quizConfig: {
-          id: quizConfig.id,
-          title: quizConfig.title,
-          category: quizConfig.category,
-          timeLimit: quizConfig.timeLimit,
-          selections: quizConfig.selections,
-          createdBy: quizConfig.faculty,
-        },
-        selectionsWithQuestions,
+        quizConfig,
+        selectionsWithQuestions: Object.entries(selectionsWithQuestions).map(
+          ([subcategory, questions]) => ({ subcategory, questions })
+        ),
         progress: {
           currentQuestionIndex: progress.currentQuestionIndex,
           timeLeft: progress.timeLeft,
@@ -923,11 +1158,13 @@ export const getQuiz = async (req, res) => {
         serverTime: Date.now(),
       },
     });
+
   } catch (err) {
-    console.error("[ERROR] getQuiz error:", err);
+    console.error("[ERROR] getQuiz:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 // ================= SAVE PROGRESS =================
 export const saveProgress = async (req, res) => {

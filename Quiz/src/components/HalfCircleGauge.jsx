@@ -13,8 +13,16 @@ const HalfCircleGauge = ({ percentage }) => {
   }, [percentage, circumference]);
 
   return (
-    <div className="relative w-[220px] h-[120px] mx-auto">
-      <svg width="220" height="120" viewBox="0 0 220 120">
+    <div style={{ 
+      position: "relative",
+      width: "220px",
+      height: "120px",
+      margin: "0 auto",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }}>
+      <svg width="220" height="120" viewBox="0 0 220 120" style={{ position: "absolute" }}>
         {/* background */}
         <path
           d="M20 100 A90 90 0 0 1 200 100"
@@ -35,11 +43,31 @@ const HalfCircleGauge = ({ percentage }) => {
         />
       </svg>
 
-      <div className="absolute inset-0 flex flex-col items-center justify-end pb-4">
-        <p className="text-3xl font-bold text-green-600">
+      <div style={{
+        position: "absolute",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "flex-end",
+        height: "100%",
+        paddingBottom: "16px",
+        width: "100%"
+      }}>
+        <p style={{
+          fontSize: "32px",
+          fontWeight: "bold",
+          color: "#22c55e",
+          margin: "0"
+        }}>
           {percentage}%
         </p>
-        <p className="text-sm text-gray-500">Overall Score</p>
+        <p style={{
+          fontSize: "14px",
+          color: "#999",
+          margin: "4px 0 0 0"
+        }}>
+          Overall Score
+        </p>
       </div>
     </div>
   );

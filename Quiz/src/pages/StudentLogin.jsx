@@ -10,36 +10,76 @@ const StudentLogin = () => {
   const [quizId, setQuizId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [blockedCountdown, setBlockedCountdown] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
+  const [isAlreadyCompleted, setIsAlreadyCompleted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const navigate = useNavigate();
 
-  // Handle countdown for blocked student
+  // ✅ Check if device is mobile
   useEffect(() => {
-    if (!isBlocked || blockedCountdown <= 0) return;
+    const checkIfMobile = () => {
+      // Check user agent for mobile devices
+      const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+      
+      // Also check screen width (less than 768px)
+      const isSmallScreen = window.innerWidth < 768;
+      
+      // Set mobile flag
+      const mobile = isMobileDevice || isSmallScreen;
+      setIsMobile(mobile);
+    };
 
-    const timer = setInterval(() => {
-      setBlockedCountdown(prev => {
-        const newValue = prev - 1;
-        if (newValue <= 0) {
-          setIsBlocked(false);
-          setError("Block expired. Please try logging in again.");
-          clearInterval(timer);
-          return 0;
-        }
-        return newValue;
-      });
-    }, 1000);
+    checkIfMobile();
+    window.addEventListener("resize", checkIfMobile);
+    return () => window.removeEventListener("resize", checkIfMobile);
+  }, []);
 
-    return () => clearInterval(timer);
-  }, [isBlocked, blockedCountdown]);
+  // ✅ If mobile, show message and hide everything
+  if (isMobile) {
+    return (
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        backgroundColor: "#f3f4f6",
+        padding: "20px",
+        textAlign: "center",
+        fontFamily: "system-ui, -apple-system, sans-serif"
+      }}>
+        <div style={{
+          backgroundColor: "white",
+          padding: "40px 20px",
+          borderRadius: "12px",
+          boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
+          maxWidth: "400px"
+        }}>
+          <div style={{ fontSize: "48px", marginBottom: "20px" }}>📱</div>
+          <h1 style={{ fontSize: "24px", fontWeight: "bold", color: "#1f2937", marginBottom: "12px" }}>
+            Mobile Device Detected
+          </h1>
+          <p style={{ fontSize: "16px", color: "#6b7280", marginBottom: "20px", lineHeight: "1.6" }}>
+            This quiz portal is designed for desktop browsers only. 
+          </p>
+          <p style={{ fontSize: "16px", color: "#6b7280", fontWeight: "bold", marginBottom: "20px" }}>
+            Please open this page on a desktop or laptop computer.
+          </p>
+          <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+            If you're using a mobile device with "Desktop Mode", please disable it.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    setIsBlocked(false);
+    setIsAlreadyCompleted(false);
 
     try {
       const response = await axios.post(
@@ -47,69 +87,42 @@ const StudentLogin = () => {
         { uid, password, quizId },
         { withCredentials: true }
       );
-console.log(response.data);
+      console.log("Login success:", response.data);
+      
       if (response.data.success) {
-        // ✅ Check if student is blocked
-        if (response.data.data.blocked && response.data.data.remainingSeconds > 0) {
-          setIsBlocked(true);
-          setBlockedCountdown(response.data.data.remainingSeconds);
-          const expiresAt = response.data.data.expiresAt;
-          
-          // Store block info in window for Quiz component later
-          window._studentBlockInfo = {
-            blocked: true,
-            remainingSeconds: response.data.data.remainingSeconds,
-            expiresAt: expiresAt
-          };
-          
-          setError(`You are blocked from this quiz. Please wait ${response.data.data.remainingSeconds} seconds before retrying.`);
-          toast.error(`Block remaining: ${response.data.data.remainingSeconds}s`);
-          return;
-        }
-
+        // ✅ Store student details and navigate to quiz
         localStorage.setItem(
           "studentDetails",
           JSON.stringify(response.data.data)
         );
         navigate(`/quiz/${response.data.data.quizId}`);
       } else {
-        // ✅ Handle blocked status in error response
-        if (response.data.data?.blocked && response.data.data?.remainingSeconds > 0) {
-          setIsBlocked(true);
-          setBlockedCountdown(response.data.data.remainingSeconds);
-          const expiresAt = response.data.data.expiresAt;
-          
-          window._studentBlockInfo = {
-            blocked: true,
-            remainingSeconds: response.data.data.remainingSeconds,
-            expiresAt: expiresAt
-          };
-          
-          setError(response.data.message || `Blocked. Retry in ${response.data.data.remainingSeconds}s`);
-          toast.error(`Block remaining: ${response.data.data.remainingSeconds}s`);
-        } else {
-          setError(response.data.message);
-        }
+        setError(response.data.message || "Login failed");
       }
     } catch (err) {
-      // ✅ Handle blocked status in error response
-      const blockData = err.response?.data?.data;
-      if (err.response?.status === 403 && blockData?.blocked && blockData?.remainingSeconds > 0) {
-        setIsBlocked(true);
-        setBlockedCountdown(blockData.remainingSeconds);
-        const expiresAt = blockData.expiresAt;
-        
-        window._studentBlockInfo = {
-          blocked: true,
-          remainingSeconds: blockData.remainingSeconds,
-          expiresAt: expiresAt
-        };
-        
-        setError(err.response?.data?.message || `Blocked. Retry in ${blockData.remainingSeconds}s`);
-        toast.error(`Block remaining: ${blockData.remainingSeconds}s`);
-      } else {
-        setError(err.response?.data?.message || "Server error");
+      console.log("Login error:", err.response?.data);
+      const errorData = err.response?.data;
+      
+      // ✅ Check if student already completed quiz
+      if (errorData?.data?.completed === true) {
+        setIsAlreadyCompleted(true);
+        setError("⚠️ You have already submitted this quiz. You cannot retake it.");
+        toast.error("You have already completed this quiz");
+        return;
       }
+      
+      // ✅ Check if student is blocked
+      if (errorData?.data?.blocked === true) {
+        const remainingSeconds = errorData.data.remainingSeconds || 0;
+        setIsBlocked(true);
+        setError(`You are blocked from this quiz. Please wait ${remainingSeconds} seconds before retrying.`);
+        toast.error(`Blocked for ${remainingSeconds} more seconds`);
+        return;
+      }
+      
+      // Regular error
+      setError(errorData?.message || "Invalid credentials");
+      toast.error(errorData?.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -138,19 +151,11 @@ console.log(response.data);
               Examinee Login
             </h2>
 
-            {/* ✅ Block Status Display */}
-            {isBlocked && (
-              <div className="mb-6 p-4 bg-red-100 border-l-4 border-red-600 rounded">
-                <p className="text-red-700 font-semibold">
-                  🚫 You are currently blocked
-                </p>
-                <p className="text-red-600 text-sm mt-2">
-                  Time remaining: <span className="font-bold text-lg">{blockedCountdown}s</span>
-                </p>
-                <p className="text-red-600 text-xs mt-1">
-                  Please wait before attempting to login again.
-                </p>
-              </div>
+            {/* ✅ Error Message Only */}
+            {error && (
+              <p className="text-sm text-center text-red-600 font-semibold mb-4">
+                {error}
+              </p>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -165,8 +170,7 @@ console.log(response.data);
                   onChange={(e) => setUid(e.target.value)}
                   placeholder="Enter UID"
                   required
-                  disabled={isBlocked}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
 
@@ -181,8 +185,7 @@ console.log(response.data);
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter Password"
                   required
-                  disabled={isBlocked}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
 
@@ -197,27 +200,20 @@ console.log(response.data);
                   onChange={(e) => setQuizId(e.target.value)}
                   placeholder="Enter Quiz ID"
                   required
-                  disabled={isBlocked}
-                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:bg-gray-200 disabled:cursor-not-allowed"
+                  className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
 
-              {error && (
-                <p className={`text-sm text-center ${isBlocked ? 'text-orange-600 font-semibold' : 'text-red-600'}`}>
-                  {error}
-                </p>
-              )}
-
               <button
                 type="submit"
-                disabled={loading || isBlocked}
+                disabled={loading}
                 className={`w-full py-3 rounded-lg text-white transition font-semibold ${
-                  isBlocked
+                  loading
                     ? 'bg-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
-                {loading ? "Logging in..." : isBlocked ? `Wait ${blockedCountdown}s...` : "Login"}
+                {loading ? "Logging in..." : "Login"}
               </button>
             </form>
           </div>

@@ -180,7 +180,6 @@ console.log("Fetched quiz:", quiz);
         quizId,
         completed: false,
         blocked: false,
-        remainingSeconds: 0,
         faculty: quiz.faculty, // include faculty info if needed
       },
     });

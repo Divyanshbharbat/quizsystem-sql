@@ -70,7 +70,17 @@ console.log(`[SUBMIT] Received submission for quiz ${quizId} from student ${stud
     const subcategoryScores = {};
 
     // 🔴 USE THE STORED questionMap instead of rebuilding it!
-    const questionMap = progress.questionMap;
+    // ✅ Parse if it's a string (JSON field from database)
+    let questionMap = progress.questionMap;
+    if (typeof questionMap === 'string') {
+      try {
+        questionMap = JSON.parse(questionMap);
+        console.log(`[SUBMIT] Parsed questionMap from JSON string`);
+      } catch (e) {
+        console.error(`[SUBMIT] Failed to parse questionMap:`, e.message);
+        questionMap = {};
+      }
+    }
     
     console.log(`[SUBMIT] Using stored questionMap with ${Object.keys(questionMap).length} questions from QuizProgress`);
     console.log(`[SUBMIT] Stored Question Map:`, JSON.stringify(questionMap, null, 2));
@@ -81,9 +91,13 @@ console.log(`[SUBMIT] Received submission for quiz ${quizId} from student ${stud
       const correctAnswer = questionData.answer;
       const question = questionData.question;
       
-      // Extract subcategory from questionId (format: "subcategory_index")
-      const subcategoryMatch = qId.match(/^(.+?)_\d+$/);
-      const subcategory = subcategoryMatch ? subcategoryMatch[1] : "Unknown";
+      // ✅ Get subcategory directly from questionData (already stored there)
+      const subcategory = questionData.subcategory || "Unknown";
+      
+      // 🔴 DEBUG: Show what we're getting from questionMap
+      console.log(`[SUBMIT] Question ID: ${qId}`);
+      console.log(`[SUBMIT] Question Data:`, JSON.stringify(questionData, null, 2));
+      console.log(`[SUBMIT] Extracted Subcategory: "${subcategory}"`);
 
       if (!subcategoryScores[subcategory]) {
         subcategoryScores[subcategory] = { correct: 0, total: 0 };

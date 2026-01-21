@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FaSignOutAlt, FaClipboardList } from "react-icons/fa";
+import { FaSignOutAlt, FaClipboardList, FaTimes } from "react-icons/fa";
 import axios from "axios";
 import logo from "../../assets/logo.png";
+import HalfCircleGauge from "../../components/HalfCircleGauge";
 
 const HomePageStudent = () => {
   const navigate = useNavigate();
@@ -11,6 +12,8 @@ const HomePageStudent = () => {
   const [student, setStudent] = useState(null);
   const [quizzes, setQuizzes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedQuiz, setSelectedQuiz] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     const storedStudent = JSON.parse(localStorage.getItem("studentDetails"));
@@ -46,6 +49,30 @@ const HomePageStudent = () => {
 
     fetchQuizzes();
   }, [student]);
+
+  // Get color based on percentage
+  const getProgressColor = (percentage) => {
+    if (percentage >= 70) return { bg: "#dcfce7", bar: "#22c55e", text: "#15803d" };
+    if (percentage >= 40) return { bg: "#fef3c7", bar: "#eab308", text: "#b45309" };
+    return { bg: "#fee2e2", bar: "#ef4444", text: "#991b1b" };
+  };
+
+  // Get progress bar color
+  const getBarColor = (percentage) => {
+    if (percentage >= 70) return "#22c55e";
+    if (percentage >= 40) return "#eab308";
+    return "#ef4444";
+  };
+
+  const openModal = (quiz) => {
+    setSelectedQuiz(quiz);
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setTimeout(() => setSelectedQuiz(null), 200);
+  };
 
   if (!student) {
     return (
@@ -126,59 +153,207 @@ const HomePageStudent = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {quizzes.map((quiz, index) => (
-                <motion.div
-                  key={quiz.quizId}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="bg-white rounded-lg border shadow-sm p-5 hover:shadow-md transition"
-                >
-                  <h3 className="text-base font-semibold text-blue-700 mb-1">
-                    {quiz.title || "Untitled Quiz"}
-                  </h3>
+              {quizzes.map((quiz, index) => {
+                const colors = getProgressColor(quiz.percentage);
+                return (
+                  <motion.div
+                    key={quiz.quizId}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    onClick={() => openModal(quiz)}
+                    className="cursor-pointer bg-white rounded-xl border-2 border-gray-200 shadow-sm p-6 hover:shadow-lg hover:border-blue-300 transition transform hover:scale-102"
+                  >
+                    {/* Quiz Title */}
+                    <h3 className="text-lg font-bold text-gray-800 mb-1 line-clamp-2">
+                      {quiz.quizTitle || quiz.title || "Untitled Quiz"}
+                    </h3>
 
-                  <p className="text-xs text-gray-500 mb-2">
-                    Category: {quiz.category}
-                  </p>
-
-                  <p className="text-xs text-gray-500 mb-3">
-                    Submitted on:{" "}
-                    {quiz.submittedAt
-                      ? new Date(quiz.submittedAt).toLocaleString()
-                      : "N/A"}
-                  </p>
-
-                  {quiz.subcategories?.length > 0 ? (
-                    <div className="space-y-1 text-sm">
-                      {quiz.subcategories.map((sub, i) => (
-                        <div
-                          key={i}
-                          className="flex justify-between text-gray-700"
-                        >
-                          <span>{sub.subcategory}</span>
-                          <span className="font-medium text-blue-600">
-                            {sub.percentage}%
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400">
-                      No subcategory data available
+                    <p className="text-xs text-gray-500 mb-4">
+                      {new Date(quiz.submittedAt).toLocaleDateString()}
                     </p>
-                  )}
 
-                  <div className="mt-3 pt-2 border-t text-sm font-medium text-gray-700">
-                    Score: {quiz.score} / {quiz.totalQuestions} (
-                    {quiz.percentage}%)
-                  </div>
-                </motion.div>
-              ))}
+                    {/* Score Display */}
+                    <div className="mb-4 pb-4 border-b-2 border-gray-100">
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                        <div>
+                          <div style={{ fontSize: "13px", color: "#999", marginBottom: "4px" }}>Overall Score</div>
+                          <div style={{ fontSize: "20px", fontWeight: "bold", color: "#333" }}>
+                            {quiz.score}/{quiz.totalQuestions}
+                          </div>
+                        </div>
+                        <div style={{
+                          minWidth: "80px",
+                          display: "flex",
+                          justifyContent: "center"
+                        }}>
+                          <HalfCircleGauge percentage={quiz.percentage} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div style={{ marginBottom: "12px" }}>
+                      <div style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "6px"
+                      }}>
+                        <span style={{ fontSize: "12px", fontWeight: "600", color: colors.text }}>Performance</span>
+                        <span style={{ fontSize: "14px", fontWeight: "bold", color: colors.text }}>
+                          {Math.round(quiz.percentage)}%
+                        </span>
+                      </div>
+                      <div style={{
+                        width: "100%",
+                        height: "8px",
+                        backgroundColor: colors.bg,
+                        borderRadius: "4px",
+                        overflow: "hidden"
+                      }}>
+                        <div style={{
+                          width: `${quiz.percentage}%`,
+                          height: "100%",
+                          backgroundColor: colors.bar,
+                          transition: "width 0.3s ease"
+                        }} />
+                      </div>
+                    </div>
+
+                    {/* Click hint */}
+                    <p style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>
+                      Click to view details
+                    </p>
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </section>
       </div>
+
+      {/* ===== MODAL ===== */}
+      {showModal && selectedQuiz && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={closeModal}
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4 overflow-hidden"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] shadow-2xl flex flex-col"
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 z-10 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 flex items-center justify-between flex-shrink-0">
+              <div>
+                <h2 className="text-2xl font-bold">{selectedQuiz.quizTitle || selectedQuiz.title || "Quiz Results"}</h2>
+                <p className="text-blue-100 text-sm mt-1">Submitted on {new Date(selectedQuiz.submittedAt).toLocaleString()}</p>
+              </div>
+              <button
+                onClick={closeModal}
+                className="text-white hover:bg-blue-800 p-2 rounded-full transition flex-shrink-0"
+              >
+                <FaTimes size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="p-6 space-y-6 overflow-y-auto flex-grow">
+
+              {/* Overall Score Section */}
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-6 border border-slate-200">
+                <h3 className="text-sm font-semibold text-gray-600 mb-4 uppercase tracking-wide">Overall Performance</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: "13px", color: "#666", marginBottom: "8px" }}>Total Score</div>
+                    <div style={{ fontSize: "28px", fontWeight: "bold", color: "#333", marginBottom: "8px" }}>
+                      {selectedQuiz.score}/{selectedQuiz.totalQuestions}
+                    </div>
+                    <div style={{
+                      fontSize: "16px",
+                      fontWeight: "bold",
+                      color: getProgressColor(selectedQuiz.percentage).text
+                    }}>
+                      {Math.round(selectedQuiz.percentage)}%
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <HalfCircleGauge percentage={selectedQuiz.percentage} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Category Breakdown */}
+              {selectedQuiz.subcategoryScores && selectedQuiz.subcategoryScores.length > 0 ? (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">Category Breakdown</h3>
+                  <div className="space-y-4">
+                    {selectedQuiz.subcategoryScores.map((sub, index) => {
+                      const colors = getProgressColor(sub.percentage);
+                      return (
+                        <div key={index} style={{
+                          backgroundColor: colors.bg,
+                          border: `2px solid ${colors.bar}`,
+                          borderRadius: "10px",
+                          padding: "16px"
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                            <div>
+                              <div style={{ fontSize: "16px", fontWeight: "bold", color: "#333", marginBottom: "4px" }}>
+                                {sub.subcategory || "Unnamed Category"}
+                              </div>
+                              <div style={{ fontSize: "13px", color: "#666" }}>
+                                Score: <strong>{sub.score}/{sub.totalQuestions}</strong>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: "18px", fontWeight: "bold", color: colors.text }}>
+                              {Math.round(sub.percentage)}%
+                            </div>
+                          </div>
+                          <div style={{
+                            width: "100%",
+                            height: "10px",
+                            backgroundColor: "rgba(0,0,0,0.1)",
+                            borderRadius: "5px",
+                            overflow: "hidden"
+                          }}>
+                            <div style={{
+                              width: `${sub.percentage}%`,
+                              height: "100%",
+                              backgroundColor: colors.bar,
+                              transition: "width 0.5s ease"
+                            }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: "13px", color: "#999", textAlign: "center" }}>
+                  No category breakdown available
+                </p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </div>
   );
 };
