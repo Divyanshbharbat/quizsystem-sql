@@ -87,12 +87,47 @@ const QuizConfig = sequelize.define(
     blocked: {
       type: DataTypes.JSON,
       allowNull: false,
-      defaultValue: []
+      defaultValue: [], // ✅ Ensure it defaults to empty array, never null
+      get() {
+        // ✅ Ensure blocked is always an array, never null
+        const value = this.getDataValue('blocked');
+        // Handle all possible formats
+        if (!value) return [];
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'string') {
+          try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (e) {
+            console.warn('[QuizConfig] Could not parse blocked JSON:', value);
+            return [];
+          }
+        }
+        return [];
+      },
+      set(value) {
+        // ✅ Always ensure we store as JSON string
+        if (!value) {
+          this.setDataValue('blocked', JSON.stringify([]));
+        } else if (Array.isArray(value)) {
+          this.setDataValue('blocked', JSON.stringify(value));
+        } else if (typeof value === 'string') {
+          // Already a string, but validate it's valid JSON
+          try {
+            JSON.parse(value);
+            this.setDataValue('blocked', value);
+          } catch (e) {
+            this.setDataValue('blocked', JSON.stringify([]));
+          }
+        } else {
+          this.setDataValue('blocked', JSON.stringify([]));
+        }
+      }
       /*
         [
           {
-            student: String,
-            expiresAt: Date
+            studentId: Number,
+            expiresAt: String (ISO date)
           }
         ]
       */

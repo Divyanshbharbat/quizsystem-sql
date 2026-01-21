@@ -50,6 +50,12 @@ const Faculty = sequelize.define(
       type: DataTypes.ENUM("even", "odd"),
       allowNull: false
     },
+
+    subjects: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: []
+    },
     
   },
   {

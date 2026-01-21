@@ -82,7 +82,7 @@ const StudentDetails = () => {
           <div className="bg-white p-6 rounded-lg shadow">
             <h2 className="text-xl font-semibold mb-4">Add Student</h2>
             <div className="space-y-3">
-              {["name", "studentId", "email", "department", "year"].map((field) => (
+              {["name", "studentId", "email", "year"].map((field) => (
                 <input
                   key={field}
                   name={field}
@@ -92,6 +92,18 @@ const StudentDetails = () => {
                   className="w-full border border-gray-300 p-2 rounded-md"
                 />
               ))}
+              <select
+                name="department"
+                value={newStudent.department || ""}
+                onChange={handleNewChange}
+                className="w-full border border-gray-300 p-2 rounded-md"
+              >
+                <option value="">-- Select Department --</option>
+                <option value="IT">IT</option>
+                <option value="CIVIL">CIVIL</option>
+                <option value="DS">DS</option>
+                <option value="Computer Science">Computer Science</option>
+              </select>
               <button
                 onClick={handleAddStudent}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-md"
@@ -129,7 +141,7 @@ const StudentDetails = () => {
             <p className="text-gray-600">Select a student to edit from the table below.</p>
           ) : (
             <div className="space-y-3">
-              {["name", "studentId", "email", "department", "year"].map((field) => (
+              {["name", "studentId", "email", "year"].map((field) => (
                 <input
                   key={field}
                   name={field}
@@ -138,6 +150,19 @@ const StudentDetails = () => {
                   onChange={handleEditChange}
                   className="w-full border border-gray-300 p-2 rounded-md"
                 />
+              ))}
+              <select
+                name="department"
+                value={editForm.department || ""}
+                onChange={handleEditChange}
+                className="w-full border border-gray-300 p-2 rounded-md"
+              >
+                <option value="">-- Select Department --</option>
+                <option value="IT">IT</option>
+                <option value="CIVIL">CIVIL</option>
+                <option value="DS">DS</option>
+                <option value="Computer Science">Computer Science</option>
+              </select>
               ))}
               <div className="flex gap-3">
                 <button

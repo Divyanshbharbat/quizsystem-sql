@@ -25,15 +25,45 @@ export const registerStudent = async (req, res) => {
   const { name, studentId, department, year, email, phone } = req.body;
 
   try {
-    const studentExists = await Student.findOne({
-      where: { [Op.or]: [{ email }, { studentId }] },
+    // ✅ Check for duplicate email
+    const emailExists = await Student.findOne({
+      where: { email },
     });
 
-    if (studentExists) {
+    if (emailExists) {
       return res.status(400).json({
         success: false,
-        message: "Student already registered with this email or studentId",
+        message: "Email already registered",
+        errorField: "email", // Specific field indicator
       });
+    }
+
+    // ✅ Check for duplicate studentId
+    const studentIdExists = await Student.findOne({
+      where: { studentId },
+    });
+
+    if (studentIdExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID already exists",
+        errorField: "studentId",
+      });
+    }
+
+    // ✅ Check for duplicate phone (if provided)
+    if (phone) {
+      const phoneExists = await Student.findOne({
+        where: { phone },
+      });
+
+      if (phoneExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already registered",
+          errorField: "phone",
+        });
+      }
     }
 
     // ✅ Send PLAIN password
@@ -83,14 +113,22 @@ console.log("Login attempt:", { uid, quizId });
     const student = await Student.findOne({ where: { studentId: uid } });
     console.log("Found student:", student);
     if (!student) {
-      return res.status(401).json({ success: false, message: "Invalid UID or password" });
+      return res.status(401).json({ 
+        success: false, 
+        message: "Invalid UID or password",
+        errorField: "uid", // ✅ Specific field
+      });
     }
 
     // ------------------ Check password ------------------
     const isMatch = await student.matchPassword(password);
     console.log("Password match:", isMatch);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: "Invalid UID or password" });
+      return res.status(401).json({ 
+        success: false, 
+        message: "Invalid UID or password",
+        errorField: "password", // ✅ Specific field
+      });
     }
 
     // ------------------ Fetch quiz with Faculty ------------------
@@ -339,7 +377,10 @@ export const getYearDeptStudents = async (req, res) => {
 
     const where = {};
     if (year) where.year = year;
-    if (department) where.department = department;
+    // Only filter by department if it's not the wildcard
+    if (department && department !== "*") {
+      where.department = department;
+    }
 
     const students = await Student.findAll({ 
       where,
@@ -403,6 +444,48 @@ export const updateStudent = async (req, res) => {
 
     const student = await Student.findByPk(req.params.studentId);
     if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+
+    // ✅ Check for duplicate email (if email is being changed)
+    if (email && email !== student.email) {
+      const emailExists = await Student.findOne({
+        where: { email, id: { [Op.ne]: student.id } },
+      });
+      if (emailExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already registered",
+          errorField: "email",
+        });
+      }
+    }
+
+    // ✅ Check for duplicate phone (if phone is being changed)
+    if (phone && phone !== student.phone) {
+      const phoneExists = await Student.findOne({
+        where: { phone, id: { [Op.ne]: student.id } },
+      });
+      if (phoneExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already registered",
+          errorField: "phone",
+        });
+      }
+    }
+
+    // ✅ Check for duplicate studentId (if studentId is being changed)
+    if (studentId && studentId !== student.studentId) {
+      const studentIdExists = await Student.findOne({
+        where: { studentId, id: { [Op.ne]: student.id } },
+      });
+      if (studentIdExists) {
+        return res.status(400).json({
+          success: false,
+          message: "Student ID already exists",
+          errorField: "studentId",
+        });
+      }
+    }
 
     await student.update({
       name: name || student.name,

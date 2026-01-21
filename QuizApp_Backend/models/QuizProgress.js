@@ -16,7 +16,7 @@ const QuizProgress = sequelize.define(
     },
 
     quizId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING,
       allowNull: false
     },
 

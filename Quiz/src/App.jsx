@@ -24,6 +24,7 @@ import BlockedStudents from "./pages/faculty/Blockedstudent"
 import BlockedStudentPage from "./pages/faculty/BlockedStudentPage";
 import Template from "./pages/faculty/Template";
 import Createquiz2 from "./pages/faculty/Createquiz2";
+import BlockedWait from "./pages/student/BlockedWait";
 // Layout
 const DashboardLayout = ({ children }) => (
   <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -37,8 +38,10 @@ const App = () => {
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Login />} />
+          <Route path="/home" element={<Home />} />
           <Route path="/quiz/:quizId" element={<Quiz />} />
+          <Route path="/blocked-wait/:quizId" element={<BlockedWait />} />
           <Route path="/student-login" element={<StudentLogin />} />
           <Route path="/student-quiz-result" element={<StStudentQuizResult />} />
           <Route path="/faculty-login" element={<Login />} />

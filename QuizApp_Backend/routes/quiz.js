@@ -1,73 +1,75 @@
-import express from 'express';
-import { 
-    createQuiz, 
-    deleteQuiz,
-    getQuiz,
-    saveProgress,
-    createQuizByFaculty,getQuizSubmissions,
-    getQuizTitleById,
-    blockStudent,
-    getBlockStatus
-} from '../controllers/quizController.js';
-import { getAllCategoriesAndSubcategories } from '../controllers/quizController.js';
-
-import { submitQuiz } from '../controllers/quizSubmissionController.js';
-import { createQuizWithImageQuestion } from '../controllers/quizController.js';
-// import { protect } from '../middlewares/user_middleware.js';
-import protect2  from '../middlewares/user_middleware.js';
-import { isAuthenticated } from '../middlewares/authMiddleware2.js';
+import express from "express";
 const router = express.Router();
+
+import upload from "../middlewares/upload.js";
+import { isAuthenticated } from "../middlewares/authMiddleware2.js";
+import checkStudentBlock from "../middlewares/checkStudentBlock.js";
+import checkStudentBlocked from "../middlewares/checkBlocked.js";
+
+import {
+  createQuizByFaculty,
+  deleteQuiz,
+  getQuiz,
+  saveProgress,
+  getQuizSubmissions,
+  getQuizTitleById,
+ 
+  getBlockStatus,
+  unblockStudent,
+  createQuizConfig,
+  updateQuizConfig,
+  deleteQuizConfig,
+  getAllQuizConfigs,
+  getGroupedCategories,
+  getAllCategoriesAndSubcategories,
+  addImageQuestion,
+} from "../controllers/quizController.js";
+import { blockStudent } from "../controllers/quizController.js"
+import { submitQuiz } from "../controllers/quizSubmissionController.js";
+import { getAllFaculties } from "../controllers/facultyController.js";
+
+
+// =================== SAFE ROUTES (NO :quizId) ===================
+router.get("/grouped-categories", getGroupedCategories);
 router.get("/grouped-categories2", getAllCategoriesAndSubcategories);
-import { addImageQuestion } from '../controllers/quizController.js';
-router.post("/imagebaseqs",  upload.single("image"),addImageQuestion)
-import { getAllQuizConfigs } from '../controllers/quizController.js';
 router.get("/gettabledata", getAllQuizConfigs);
-import { updateQuizConfig } from '../controllers/quizController.js';
+router.get("/getall", getAllFaculties);
+
+router.post("/create", createQuizByFaculty);
+router.post("/create-config", createQuizConfig);
+
 router.put("/config/:id", updateQuizConfig);
-import { deleteQuizConfig } from '../controllers/quizController.js';
 router.delete("/config/:id", deleteQuizConfig);
 
-import { getGroupedCategories } from '../controllers/quizController.js';
-router.get("/grouped-categories", getGroupedCategories);
-import { getAllFaculties } from '../controllers/facultyController.js';
-import upload from '../middlewares/upload.js';
-router.post("/:quizId/addqs",upload.single("image"), addImageQuestion);
 
-router.get("/:quizId/submissions", getQuizSubmissions);
-// Save progress for a quiz
+// =================== IMAGE QUESTION ===================
+router.post("/imagebaseqs", upload.single("image"), addImageQuestion);
+router.post("/:quizId/addqs", upload.single("image"), addImageQuestion);
+
+
+// =================== BLOCK SYSTEM (MUST BE BEFORE /:quizId) ===================
+router.post("/:quizId/block-student", isAuthenticated, blockStudent);
+router.get("/:quizId/block-status", isAuthenticated, getBlockStatus);
+router.post("/:quizId/unblock-student", isAuthenticated, unblockStudent);
+
+
+// =================== QUIZ OPERATIONS ===================
 router.post("/:quizId/save-progress", isAuthenticated, saveProgress);
+router.post("/:quizId/submit", isAuthenticated, submitQuiz);
+router.get("/:quizId/submissions", isAuthenticated, getQuizSubmissions);
+router.get("/title/:quizId", getQuizTitleById);
 
-// Route to create a quiz
-router.post('/create', createQuizByFaculty);
-router.get("/getall", getAllFaculties);
-import checkStudentBlock from '../middlewares/checkStudentBlock.js';
-// Get a specific quiz by ID
+
+// =================== 🔥 MAIN QUIZ LOAD (LAST) ===================
 router.get(
   "/:quizId",
   isAuthenticated,
-  checkStudentBlock,
+  checkStudentBlocked,
   getQuiz
 );
-router.delete('/:quizId', deleteQuiz);
-router.get('/title/:quizId',getQuizTitleById)
-
-// Get block status for a quiz
-router.get('/:quizId/block-status', isAuthenticated, getBlockStatus);
-
-// Submit a quiz
-router.post('/:quizId/submit', isAuthenticated, submitQuiz);
-import { createQuizConfig } from '../controllers/quizController.js';
-router.post("/create-config", createQuizConfig);
 
 
-// Get category-wise answer distribution for a specific quiz and student
-
-router.post("/upload",createQuizByFaculty)
-import { unblockStudent } from '../controllers/quizController.js';
-router.post("/:quizId/unblock-student", unblockStudent);
-router.post("/:quizId/block-student", isAuthenticated, blockStudent);
-
-// Block student (alias for block-student for frontend compatibility)
-router.post("/:quizId/block", isAuthenticated, blockStudent);
+// =================== DELETE QUIZ ===================
+router.delete("/:quizId", deleteQuiz);
 
 export default router;

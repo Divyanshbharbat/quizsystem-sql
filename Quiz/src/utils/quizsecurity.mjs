@@ -1,3 +1,22 @@
+// =========================
+// Window Focus Tracking
+// =========================
+
+let windowFocusLostTime = null;
+let windowFocusLossCount = 0;
+
+export const resetWindowFocusTracking = () => {
+  windowFocusLostTime = null;
+  windowFocusLossCount = 0;
+};
+
+export const getWindowFocusLossCount = () => windowFocusLossCount;
+
+export const incrementWindowFocusLossCount = () => {
+  windowFocusLossCount++;
+  windowFocusLostTime = Date.now();
+  return windowFocusLossCount;
+};
 
 // =========================
 // Shuffle Utilities

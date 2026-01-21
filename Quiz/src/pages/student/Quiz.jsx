@@ -8,6 +8,9 @@ import {
   randomShuffle,
   blockStudent,
   handleCheatingDetected,
+  resetWindowFocusTracking,
+  incrementWindowFocusLossCount,
+  getWindowFocusLossCount,
 } from "../../utils/quizsecurity.mjs";
 
 /* =========================
@@ -172,6 +175,9 @@ const Quiz = () => {
   const stateRef = useRef({ quizFrozen: false, submitting: false, quizCompleted: false });
   
 
+  const [windowLostFocus, setWindowLostFocus] = useState(false);
+  const [windowFocusWarnings, setWindowFocusWarnings] = useState(0);
+
   /* ---------------------
      Keep state ref updated with current values
   --------------------- */
@@ -179,7 +185,16 @@ const Quiz = () => {
     stateRef.current = { quizFrozen, submitting, quizCompleted };
     // ✅ Sync quizFrozen to window for security listener to check
     window._quizFrozen = quizFrozen;
-  }, [quizFrozen, submitting, quizCompleted]);
+
+    // ✅ Notify Electron about quiz state
+    if (window.electronAPI) {
+      if (progressLoaded && !quizCompleted && !quizFrozen) {
+        window.electronAPI.quizStarted().catch(console.error);
+      } else if (quizFrozen) {
+        window.electronAPI.quizBlocked().catch(console.error);
+      }
+    }
+  }, [quizFrozen, submitting, quizCompleted, progressLoaded]);
 
   /* ---------------------
      Fullscreen helpers (local)
@@ -219,6 +234,63 @@ const Quiz = () => {
     setIsMobileDevice(isMobile);
     console.log(`[MOBILE DETECTION] UserAgent mobile: ${isMobileUserAgent}, Small screen: ${isSmallScreen}, Final: ${isMobile}`);
   }, []);
+
+  /* ---------------------
+     Window Focus Detection - Block student if they switch tabs/windows
+     Detects when browser window loses focus during quiz
+  --------------------- */
+  useEffect(() => {
+    if (!progressLoaded || quizCompleted || quizFrozen) return;
+
+    // Track window focus changes
+    const handleWindowBlur = () => {
+      console.log("[WINDOW BLUR] Student switched tabs or windows");
+      const focusLossCount = incrementWindowFocusLossCount();
+      setWindowLostFocus(true);
+      setWindowFocusWarnings(focusLossCount);
+      
+      // Show warning
+      toast.warning("⚠️ You switched tabs! Stay in the quiz window.");
+
+      // On first blur = block for 30 seconds (WARNING: Very strict - can change to >= 2 later)
+      if (focusLossCount >= 1 && !quizFrozen) {
+        console.warn("[WINDOW BLUR BLOCK] Tab switch detected (count=" + focusLossCount + ") - BLOCKING student");
+        
+        // ✅ Call blockStudent to trigger the backend block
+        blockStudent(quizId).then(result => {
+          console.log("[WINDOW BLUR BLOCK] blockStudent response:", result);
+          if (result && result.expiresAt) {
+            setQuizFrozen(true);
+            setBlockCountdown(result.remainingSeconds || 30);
+            window._blockExpiresAt = result.expiresAt;
+            toast.error("⚠️ You have been BLOCKED for leaving the quiz tab! Block duration: 30 seconds");
+            // Reset focus loss tracking
+            resetWindowFocusTracking();
+          }
+        }).catch(err => {
+          console.error("Failed to block on window blur:", err);
+        });
+      }
+    };
+
+    const handleWindowFocus = () => {
+      console.log("[WINDOW FOCUS] Student returned to quiz, blur count was:", windowFocusWarnings);
+      setWindowLostFocus(false);
+      
+      // If not blocked, just welcome them back
+      if (!quizFrozen) {
+        toast.success("✅ Welcome back to the quiz!");
+      }
+    };
+
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('focus', handleWindowFocus);
+
+    return () => {
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [progressLoaded, quizCompleted, quizFrozen, quizId, windowFocusWarnings]);
 
   /* ---------------------
      Monitor Deliberate Navigation (Intentional Click Away)
@@ -330,6 +402,80 @@ useEffect(() => {
         { withCredentials: true }
       );
       console.log(data)
+      
+      // ✅ Check if student is BLOCKED FIRST (before checking success)
+      const isBlocked = data.blocked || false;
+      const remainingSeconds = data.remainingSeconds || 0;
+      const expiresAt = data.expiresAt || 0;
+      
+      console.log("[QUIZ LOAD] Checking block state:");
+      console.log("   isBlocked:", isBlocked);
+      console.log("   remainingSeconds:", remainingSeconds);
+      console.log("   expiresAt:", expiresAt);
+      
+      // ✅ If blocked, handle it regardless of success flag
+      if (isBlocked) {
+        console.log("[QUIZ LOAD] Student is BLOCKED - handling block screen");
+        
+        let initialBlockDuration = 0;
+        if (expiresAt) {
+          const now = Date.now();
+          initialBlockDuration = Math.ceil((expiresAt - now) / 1000);
+          initialBlockDuration = Math.max(0, initialBlockDuration);
+        } else if (remainingSeconds > 0) {
+          initialBlockDuration = remainingSeconds;
+        } else {
+          initialBlockDuration = 30; // fallback
+        }
+        
+        if (initialBlockDuration > 0) {
+          setQuizFrozen(true);
+          setBlockCountdown(initialBlockDuration);
+          toast.error(data.message || "You are blocked from this quiz.");
+          
+          // ✅ Store expiresAt for countdown calculation
+          if (expiresAt) {
+            window._blockExpiresAt = expiresAt;
+          }
+          
+          // ✅ PROPER COUNTDOWN LOGIC - Calculate from expiresAt timestamp (works on refresh)
+          let timeRemaining = initialBlockDuration;
+          console.log(`[BLOCK] Starting countdown from ${initialBlockDuration} seconds, expiresAt=${expiresAt}`);
+          
+          // Update countdown every 1 second for smooth display
+          const countdownInterval = setInterval(() => {
+            // ✅ FIXED: Calculate remaining time from expiresAt, not just decrement
+            if (window._blockExpiresAt) {
+              const now = Date.now();
+              timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+              timeRemaining = Math.max(0, timeRemaining); // Don't go below 0
+            } else {
+              timeRemaining--;
+            }
+
+            console.log(`[BLOCK] Countdown: ${timeRemaining}s remaining`);
+            setBlockCountdown(timeRemaining);
+            
+            // When countdown reaches 0, auto-submit
+            if (timeRemaining <= 0) {
+              console.log("[BLOCK] Countdown reached 0, auto-submitting");
+              clearInterval(countdownInterval);
+              setQuizFrozen(false);
+              // Block expired - show message
+              toast.success("Block expired. Redirecting...");
+              navigate("/");
+            }
+          }, 1000); // Update every 1 second
+          
+          window._blockCountdownInterval = countdownInterval;
+        }
+        
+        // Don't continue - stay on block screen
+        setProgressLoaded(true);
+        return;
+      }
+      
+      // ✅ Only check success if NOT blocked
       if (!data.success) {
         navigate("/");
         return;
@@ -338,12 +484,8 @@ useEffect(() => {
       const quiz = data.data.quizConfig;
       const progress = data.data.progress;
       const selectionsWithQuestions = data.data.selectionsWithQuestions; // ✅ Get questions from backend
-      console.log(progress)
-   // server timestamp in ms
-      const isBlocked = data.blocked || false;
-      const remainingSeconds = data.remainingSeconds || 0;
+      console.log("[QUIZ LOAD] Progress:", progress)
       const isCompleted = data.completed || false;
-      const expiresAt = data.expiresAt || 0;
 
       // ✅ Check if student already completed
       if (isCompleted) {
@@ -355,111 +497,11 @@ useEffect(() => {
       setQuiz(quiz);
 
       // Use timeLeft directly from backend
-setTimeLeft(
-  typeof progress?.timeLeft === "number"
-    ? progress.timeLeft
-    : quiz.timeLimit * 60
-);
-
-      // ----------------------------
-      // Block handling
-      // ----------------------------
-      // Calculate remaining time from expiresAt timestamp (accurate on refresh)
-      let initialBlockDuration = 0;
-      if (isBlocked && expiresAt) {
-        const now = Date.now();
-        initialBlockDuration = Math.ceil((expiresAt - now) / 1000);
-        initialBlockDuration = Math.max(0, initialBlockDuration);
-      } else if (isBlocked && remainingSeconds > 0) {
-        initialBlockDuration = remainingSeconds;
-      } else if (isBlocked) {
-        initialBlockDuration = 30; // fallback
-      }
-      
-      if (isBlocked && initialBlockDuration > 0) {
-        setQuizFrozen(true);
-        setBlockCountdown(initialBlockDuration);
-        toast.error(data.message || "You are blocked from this quiz.");
-        // Attempt to enter fullscreen (sync call)
-        setTimeout(() => enterFullscreen(), 100);
-        
-        // ✅ Store expiresAt for countdown calculation
-        if (expiresAt) {
-          window._blockExpiresAt = expiresAt;
-        }
-        
-        // ✅ PROPER COUNTDOWN LOGIC - Calculate from expiresAt timestamp (works on refresh)
-        let timeRemaining = initialBlockDuration;
-        console.log(`[BLOCK] Starting countdown from ${initialBlockDuration} seconds, expiresAt=${expiresAt}`);
-        
-        // Update countdown every 1 second for smooth display
-        const countdownInterval = setInterval(() => {
-          // ✅ FIXED: Calculate remaining time from expiresAt, not just decrement
-          if (window._blockExpiresAt) {
-            const now = Date.now();
-            timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
-            timeRemaining = Math.max(0, timeRemaining); // Don't go below 0
-          } else {
-            timeRemaining--;
-          }
-
-          const { quizFrozen: frozen, submitting: sub, quizCompleted: completed } = stateRef.current;
-          console.log(`[BLOCK] Countdown: ${timeRemaining}s remaining, frozen=${frozen}, submitting=${sub}, completed=${completed}`);
-          setBlockCountdown(timeRemaining);
-          
-          // When countdown reaches 0, check if should auto-submit
-          if (timeRemaining <= 0) {
-            console.log("[BLOCK] Countdown reached 0, clearing intervals");
-            clearInterval(countdownInterval);
-            if (window._blockPollInterval) clearInterval(window._blockPollInterval);
-            
-            // Get CURRENT state from ref
-            const { quizFrozen: currentFrozen, submitting: currentSub, quizCompleted: currentCompleted } = stateRef.current;
-            
-            // Check if NOT in fullscreen OR tab is hidden
-            const isHidden = document.hidden;
-            const isFullscreen = !!document.fullscreenElement;
-            console.log(`[BLOCK] Final Status: hidden=${isHidden}, fullscreen=${isFullscreen}, frozen=${currentFrozen}, submitting=${currentSub}, completed=${currentCompleted}`);
-            
-            if ((isHidden || !isFullscreen) && !currentCompleted && !currentSub) {
-              console.log("[BLOCK] AUTO-SUBMITTING because: hidden=" + isHidden + " OR not fullscreen=" + !isFullscreen);
-              toast.error("Block expired but you are not in the quiz tab or fullscreen. Auto-submitting quiz.");
-              // Directly call the submit endpoint since state is unreliable in closure
-              handleSubmit();
-            } else {
-              console.log("[BLOCK] UNFREEZING - user is in fullscreen and tab is visible, or quiz already completed/submitting");
-              setQuizFrozen(false);
-              toast.success("Block expired. You can now continue the quiz.");
-            }
-          }
-        }, 1000); // Update every 1 second for accurate countdown
-        
-        window._blockCountdownInterval = countdownInterval;
-        
-        // Also poll backend every 5 seconds to verify block status
-        const pollInterval = setInterval(async () => {
-          try {
-            const statusRes = await axios.get(
-              `${import.meta.env.VITE_APP}/api/quizzes/${quizId}/block-status`,
-              { withCredentials: true }
-            );
-            if (statusRes.data.success) {
-              // Just verify block status, don't override local countdown
-              console.log(`Block status from server: ${statusRes.data.remainingSeconds}s remaining`);
-            }
-          } catch (err) {
-            console.error("Error polling block status:", err);
-          }
-        }, 5000);
-        window._blockPollInterval = pollInterval;
-      } else {
-        setQuizFrozen(false);
-        setBlockCountdown(0);
-        if (window._blockPollInterval) {
-          clearInterval(window._blockPollInterval);
-          delete window._blockPollInterval;
-        }
-      }
+      setTimeLeft(
+        typeof progress?.timeLeft === "number"
+          ? progress.timeLeft
+          : quiz.timeLimit * 60
+      );
 
       setSelections(selectionsWithQuestions || []); // ✅ Use selectionsWithQuestions instead of quiz.selections
 
@@ -473,8 +515,76 @@ setTimeLeft(
       setProgressLoaded(true);
       // Request fullscreen synchronously (after short delay for render)
       setTimeout(() => enterFullscreen(), 100);
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error("[QUIZ LOAD ERROR]", error);
+      
+      // ✅ Handle 403 Forbidden (Student is blocked)
+      if (error.response?.status === 403 && error.response?.data?.blocked) {
+        console.log("[QUIZ LOAD] 403 Blocked response received");
+        const blockedData = error.response.data;
+        const isBlocked = blockedData.blocked || false;
+        const remainingSeconds = blockedData.remainingSeconds || 0;
+        const expiresAt = blockedData.expiresAt || 0;
+        
+        console.log("[QUIZ LOAD ERROR] Student BLOCKED:");
+        console.log("   isBlocked:", isBlocked);
+        console.log("   remainingSeconds:", remainingSeconds);
+        console.log("   expiresAt:", expiresAt);
+        
+        if (isBlocked && expiresAt > 0) {
+          let initialBlockDuration = 0;
+          if (expiresAt) {
+            const now = Date.now();
+            initialBlockDuration = Math.ceil((expiresAt - now) / 1000);
+            initialBlockDuration = Math.max(0, initialBlockDuration);
+          } else if (remainingSeconds > 0) {
+            initialBlockDuration = remainingSeconds;
+          } else {
+            initialBlockDuration = 30;
+          }
+          
+          if (initialBlockDuration > 0) {
+            setQuizFrozen(true);
+            setBlockCountdown(initialBlockDuration);
+            toast.error(blockedData.message || "You are blocked from this quiz.");
+            
+            if (expiresAt) {
+              window._blockExpiresAt = expiresAt;
+            }
+            
+            let timeRemaining = initialBlockDuration;
+            console.log(`[BLOCK ERROR] Starting countdown from ${initialBlockDuration}s`);
+            
+            const countdownInterval = setInterval(() => {
+              if (window._blockExpiresAt) {
+                const now = Date.now();
+                timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+                timeRemaining = Math.max(0, timeRemaining);
+              } else {
+                timeRemaining--;
+              }
+              
+              setBlockCountdown(timeRemaining);
+              
+              if (timeRemaining <= 0) {
+                clearInterval(countdownInterval);
+                setQuizFrozen(false);
+                toast.success("Block expired. Redirecting...");
+                navigate("/");
+              }
+            }, 1000);
+            
+            window._blockCountdownInterval = countdownInterval;
+          }
+          
+          setProgressLoaded(true);
+          return;
+        }
+      }
+      
+      // Other errors
+      console.error("Failed to load quiz:", error.message);
+      navigate("/");
     }
   };
 
@@ -647,43 +757,68 @@ useEffect(() => {
       // If NOT in fullscreen AND tab is visible (not alt-tab) AND not already blocked
       // This means student INTENTIONALLY exited fullscreen (cheating)
       if (!isFullscreen && !isHidden && !quizFrozen && !quizCompleted) {
-        console.warn("[CHEAT DETECTED] Student intentionally exited fullscreen - BLOCKING for 30 seconds");
-        toast.error("⚠️ You exited fullscreen! You are blocked for 30 seconds.");
+        console.warn("[CHEAT DETECTED] Student intentionally exited fullscreen - BLOCKING from backend");
+        toast.error("🚫 CHEATING DETECTED! You exited fullscreen. You are BLOCKED for 30 seconds.");
 
-        setQuizFrozen(true);
-        let remainingSeconds = 30;
-        setBlockCountdown(remainingSeconds);
+        // ✅ CALL BACKEND TO SAVE BLOCK
+        blockStudent(quizId)
+          .then(blockResult => {
+            console.log("[FULLSCREEN BLOCK] Backend response:", blockResult);
+            
+            if (blockResult && blockResult.expiresAt) {
+              setQuizFrozen(true);
+              const remainingSeconds = blockResult.remainingSeconds || 30;
+              setBlockCountdown(remainingSeconds);
+              window._blockExpiresAt = blockResult.expiresAt;
+              
+              console.log(`[FULLSCREEN BLOCK] Student blocked for ${remainingSeconds}s, expiresAt=${blockResult.expiresAt}`);
+              
+              // Start countdown from backend timestamp
+              let timeRemaining = remainingSeconds;
+              const countdownInterval = setInterval(() => {
+                if (window._blockExpiresAt) {
+                  const now = Date.now();
+                  timeRemaining = Math.ceil((window._blockExpiresAt - now) / 1000);
+                  timeRemaining = Math.max(0, timeRemaining);
+                } else {
+                  timeRemaining--;
+                }
+                
+                setBlockCountdown(Math.max(0, timeRemaining));
+                console.log(`[FULLSCREEN BLOCK] Countdown: ${timeRemaining}s remaining`);
 
-        // Countdown every 1 second
-        const countdownInterval = setInterval(() => {
-          remainingSeconds--;
-          setBlockCountdown(Math.max(0, remainingSeconds));
-          
-          console.log(`[BLOCK COUNTDOWN] ${remainingSeconds}s remaining`);
+                if (timeRemaining <= 0) {
+                  clearInterval(countdownInterval);
+                  console.log("[FULLSCREEN BLOCK] Block expired - checking student state");
 
-          if (remainingSeconds <= 0) {
-            clearInterval(countdownInterval);
-            console.log("[BLOCK EXPIRED] Checking student status...");
+                  // After 30 seconds, check if student is back in fullscreen
+                  const isBackInFullscreen = !!document.fullscreenElement;
+                  console.log(`[FULLSCREEN BLOCK EXPIRED] Back in fullscreen? ${isBackInFullscreen}`);
 
-            // After 30 seconds, check if student is back in fullscreen
-            const isBackInFullscreen = !!document.fullscreenElement;
-            console.log(`[BLOCK EXPIRED] Back in fullscreen? ${isBackInFullscreen}`);
+                  if (isBackInFullscreen) {
+                    // ✅ Student is back in fullscreen → Resume quiz
+                    console.log("[RESUME] Student back in fullscreen - resuming quiz");
+                    setQuizFrozen(false);
+                    toast.success("✅ You're back in fullscreen. Quiz resumed!");
+                  } else {
+                    // ❌ Student still not in fullscreen → Auto-submit
+                    console.log("[AUTO-SUBMIT] Student NOT in fullscreen - auto-submitting quiz");
+                    toast.error("❌ Block expired but you're not in fullscreen. Auto-submitting quiz...");
+                    handleSubmit(); // Auto-submit with current answers
+                  }
+                }
+              }, 1000);
 
-            if (isBackInFullscreen) {
-              // ✅ Student is back in fullscreen → Resume quiz
-              console.log("[RESUME] Student back in fullscreen - resuming quiz");
-              setQuizFrozen(false);
-              toast.success("✅ You're back in fullscreen. Quiz resumed!");
-            } else {
-              // ❌ Student still not in fullscreen → Auto-submit
-              console.log("[AUTO-SUBMIT] Student NOT in fullscreen - auto-submitting quiz");
-              toast.error("❌ Block expired but you're not in fullscreen. Auto-submitting quiz...");
-              handleSubmit(); // Auto-submit with current answers
+              window._blockCountdownInterval = countdownInterval;
             }
-          }
-        }, 1000);
-
-        window._blockCountdownInterval = countdownInterval;
+          })
+          .catch(err => {
+            console.error("[FULLSCREEN BLOCK] Error calling backend:", err);
+            // Still freeze locally even if backend fails
+            setQuizFrozen(true);
+            setBlockCountdown(30);
+            toast.error("🚫 CHEATING DETECTED! Block applied. Block duration: 30 seconds");
+          });
       }
     };
 
@@ -861,7 +996,48 @@ const handleSubmit = async () => {
         e.preventDefault();
         e.stopPropagation();
         console.warn("[KEYBOARD BLOCKED] Escape key pressed");
-        toast.error("🚫 Escape key is disabled during quiz!");
+        
+        if (!quizFrozen) {
+          console.log("[ESC KEY] ⏳ Sending block request to backend...");
+          toast.loading("🔄 Processing ESC key block...", { id: "esc-block" });
+          
+          // ✅ Wait for backend to confirm block is saved
+          blockStudent(quizId)
+            .then(result => {
+              console.log("[ESC KEY] ✅ Backend confirmed block:", result);
+              
+              if (result && result.expiresAt) {
+                // Backend confirmed block is saved to database
+                setQuizFrozen(true);
+                const remainingSeconds = result.remainingSeconds || 30;
+                setBlockCountdown(remainingSeconds);
+                window._blockExpiresAt = result.expiresAt;
+                
+                // Signal to Electron that student is blocked
+                if (window.electronAPI?.quizBlocked) {
+                  window.electronAPI.quizBlocked().catch(console.error);
+                }
+                
+                toast.error(
+                  `🚫 BLOCKED FOR PRESSING ESC!\n\nYou are blocked for ${remainingSeconds} seconds.\n\nDo not attempt to close or exit.`,
+                  { id: "esc-block", duration: 5000 }
+                );
+                console.log(`[ESC KEY] Block confirmed - ${remainingSeconds}s remaining`);
+              }
+            })
+            .catch(err => {
+              console.error("[ESC KEY] ❌ Backend call failed:", err);
+              // Still freeze locally even if backend call fails (defensive)
+              setQuizFrozen(true);
+              setBlockCountdown(30);
+              toast.error(
+                "🚫 BLOCKED FOR PRESSING ESC!\n\n(Block status: backend error but local block applied)",
+                { id: "esc-block", duration: 5000 }
+              );
+            });
+        } else {
+          console.log("[SECURITY] Escape blocked silently during block state");
+        }
         return;
       }
 
@@ -870,7 +1046,29 @@ const handleSubmit = async () => {
         e.preventDefault();
         e.stopPropagation();
         console.warn("[KEYBOARD BLOCKED] F11 key pressed");
-        toast.error("🚫 F11 is disabled during quiz!");
+        // ✅ Call cheat detection to properly block the student
+        if (!quizFrozen) {
+          console.log("[F11 KEY] Blocking student via backend API");
+          toast.error("🚫 F11 is disabled during quiz! You are BLOCKED.");
+          
+          // ✅ DIRECTLY call blockStudent to save to backend database
+          blockStudent(quizId).then(result => {
+            console.log("[F11 KEY] blockStudent response:", result);
+            if (result && result.expiresAt) {
+              setQuizFrozen(true);
+              setBlockCountdown(result.remainingSeconds || 30);
+              window._blockExpiresAt = result.expiresAt;
+              toast.error("⚠️ You have been BLOCKED for pressing F11! Block duration: 30 seconds");
+            }
+          }).catch(err => {
+            console.error("[F11 KEY] Failed to block:", err);
+            // Still freeze locally even if backend call fails
+            setQuizFrozen(true);
+            setBlockCountdown(30);
+          });
+        } else {
+          console.log("[SECURITY] F11 blocked silently during block state");
+        }
         return;
       }
 
@@ -879,7 +1077,12 @@ const handleSubmit = async () => {
         e.preventDefault();
         e.stopPropagation();
         console.warn("[KEYBOARD BLOCKED] Alt+Tab pressed");
-        toast.error("🚫 Alt+Tab is disabled during quiz!");
+        // ✅ During block state: silently prevent without showing toast
+        if (!quizFrozen) {
+          toast.error("🚫 Alt+Tab is disabled during quiz!");
+        } else {
+          console.log("[SECURITY] Alt+Tab blocked silently during block state");
+        }
         return;
       }
 
@@ -949,19 +1152,37 @@ const handleSubmit = async () => {
     };
   }, [progressLoaded, quizCompleted]);
   /* ---------------------
-     Tab Visibility - Warn if switched tabs but don't auto-block
+     Tab Visibility - Block if switched tabs
   --------------------- */
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && !quizCompleted) {
-        console.log("[TAB] Student switched tabs - just warn, don't block");
-        toast.warning("⚠️ You switched tabs. Please stay in the quiz!");
+    if (!progressLoaded || quizCompleted) return;
+
+    const handleVisibilityChange = async () => {
+      if (document.hidden && !quizCompleted && !quizFrozen) {
+        console.log("[TAB VISIBILITY] Student switched tabs - BLOCKING");
+        toast.error("⚠️ You switched tabs! You are now BLOCKED for 30 seconds.");
+        
+        try {
+          // Block the student for switching tabs
+          const result = await blockStudent(quizId);
+          if (result && result.expiresAt) {
+            setQuizFrozen(true);
+            setBlockCountdown(result.remainingSeconds || 30);
+            window._blockExpiresAt = result.expiresAt;
+            console.log("[TAB BLOCK] Student blocked for tab switch. Remaining: " + (result.remainingSeconds || 30) + "s");
+          }
+        } catch (err) {
+          console.error("[TAB BLOCK] Failed to block on tab switch:", err);
+        }
+      } else if (!document.hidden && !quizFrozen) {
+        console.log("[TAB VISIBILITY] Student returned to quiz tab");
+        toast.success("✅ Welcome back to the quiz!");
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [quizCompleted]);
+  }, [quizCompleted, quizFrozen, progressLoaded, quizId]);
 
 
   /* ---------------------
@@ -1115,6 +1336,40 @@ const handleSubmit = async () => {
   /* ---------------------
      Loading / Countdown / Mobile Detection
   --------------------- */
+  
+  // ✅ Show block screen FIRST, even if questions not loaded yet
+  if (quizFrozen && blockCountdown > 0) {
+    return (
+      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
+        <Navbar 
+          userName={student?.name || "Student"} 
+          onProfileClick={toggleSidebar}
+          isQuizActive={false}
+        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm text-white select-none pointer-events-auto">
+          <div className="text-center">
+            <h1 className="text-4xl font-bold mb-4">⏸️ Quiz Frozen</h1>
+            <p className="text-xl mb-2">You have been blocked for cheating.</p>
+            <div className="text-5xl font-bold mb-4 text-red-400">{blockCountdown}s</div>
+            <p className="text-lg mb-4">Remaining block time</p>
+            {!document.fullscreenElement && (
+              <div className="mb-4">
+                <p className="text-sm mb-2">You must be in fullscreen mode to continue.</p>
+                <button
+                  onClick={enterFullscreen}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
+                >
+                  Enter Fullscreen
+                </button>
+              </div>
+            )}
+            <p className="text-sm mt-4">Return to the quiz tab and fullscreen to continue.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!progressLoaded || questions.length === 0)
     return <p className="text-center mt-20 text-lg">Loading quiz...</p>;
 
@@ -1183,28 +1438,6 @@ const handleSubmit = async () => {
         </>
       )}
 
-      {quizFrozen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90 backdrop-blur-sm text-white select-none pointer-events-auto">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold mb-4">Quiz Frozen</h1>
-            <p className="text-xl mb-2">You have been blocked for cheating.</p>
-            <p className="text-lg mb-4">Time remaining: {blockCountdown} seconds</p>
-            {!document.fullscreenElement && (
-              <div className="mb-4">
-                <p className="text-sm mb-2">You must be in fullscreen mode to continue.</p>
-                <button
-                  onClick={enterFullscreen}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
-                >
-                  Enter Fullscreen
-                </button>
-              </div>
-            )}
-            <p className="text-sm mt-4">Return to the quiz tab and fullscreen to continue.</p>
-          </div>
-        </div>
-      )}
-
       {submitting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm text-white text-3xl font-semibold select-none">
           Submitting Quiz...
@@ -1268,10 +1501,10 @@ const handleSubmit = async () => {
           </div>
         </div>
 
-        <aside className="hidden md:flex md:flex-col md:w-80 xl:w-96 bg-white p-4 shadow-md rounded-lg overflow-auto">
-          <h2 className="font-bold text-lg mb-4 border-b pb-2 text-center text-gray-800">Questions by Category</h2>
+        <aside className="hidden md:flex md:flex-col md:w-72 xl:w-80 bg-white p-4 shadow-md rounded-lg overflow-auto">
+          <h2 className="font-bold text-lg mb-4 border-b pb-2 text-center text-gray-800">Questions</h2>
           
-          {/* Group questions by subcategory */}
+          {/* Show subcategories with clickable question numbers */}
           {(() => {
             const groupedBySubcategory = {};
             questions.forEach((q, idx) => {
@@ -1283,21 +1516,18 @@ const handleSubmit = async () => {
             });
 
             return Object.entries(groupedBySubcategory).map(([subcategory, qs], groupIdx) => (
-              <div key={groupIdx} className="mb-5">
+              <div key={groupIdx} className="mb-5 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 {/* Subcategory header with circle showing question count */}
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex-grow">
-                    <h3 className="font-semibold text-sm text-gray-700">{subcategory}</h3>
-                  </div>
-                  {/* Rounded circle with question count */}
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-md">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className="font-semibold text-sm text-gray-700 flex-grow">{subcategory}</h3>
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-md flex-shrink-0">
                     {qs.length}
                   </div>
                 </div>
                 
-                <div className="space-y-2">
+                {/* Question numbers grid - clickable */}
+                <div className="grid grid-cols-4 gap-2">
                   {qs.map((q) => {
-                    const optionLabel = ['A', 'B', 'C', 'D'][q.index % 4];
                     const isCurrentQuestion = currentQuestionIndex === q.index;
                     const isAnsweredQuestion = isAnswered(q.index);
                     
@@ -1311,20 +1541,16 @@ const handleSubmit = async () => {
                             saveProgress();
                           }
                         }}
-                        className={`w-full p-2 rounded-lg transition duration-200 text-sm flex items-center justify-between ${
+                        className={`w-full h-9 rounded-lg transition duration-200 text-xs font-semibold flex items-center justify-center ${
                           isCurrentQuestion
-                            ? "bg-blue-600 text-white shadow-md"
+                            ? "bg-blue-600 text-white shadow-md border-2 border-blue-700"
                             : isAnsweredQuestion
                             ? "bg-green-100 text-green-800 border border-green-300 hover:bg-green-200"
-                            : "bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200"
-                        } ${quizFrozen ? "opacity-50 cursor-not-allowed" : ""}`}
-                        title={`Q${q.index + 1}: ${q.question?.substring(0, 50)}...`}
+                            : "bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+                        } ${quizFrozen ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                        title={`Q${q.index + 1}`}
                       >
-                        <span className="font-semibold">Q{q.index + 1}</span>
-                        <span className="text-xs font-bold bg-gray-300 bg-opacity-50 px-2 py-1 rounded">
-                          {optionLabel}
-                        </span>
-                        {isAnsweredQuestion && <span className="ml-2 text-green-600">✓</span>}
+                        {q.index + 1}
                       </button>
                     );
                   })}

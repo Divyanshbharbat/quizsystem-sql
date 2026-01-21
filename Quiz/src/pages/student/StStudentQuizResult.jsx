@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { useParams } from "react-router-dom";
-import HalfCircleGauge from "../../components/HalfCircleGauge";
 
 const StStudentQuizResult = () => {
   const { quizId } = useParams();
@@ -115,216 +114,98 @@ const StStudentQuizResult = () => {
           );
           const totalScore = student.totalScore;
           const percentage = Math.round((totalScore / totalQuestions) * 100);
+          const isExpanded = selectedStudent?.studentId === student.studentId;
 
           return (
             <div
               key={student.studentId}
-              onClick={() => setSelectedStudent({ ...student, percentage })}
-              style={{
-                cursor: "pointer",
-                border: "1px solid #e0e0e0",
-                borderRadius: "8px",
-                padding: "16px",
-                backgroundColor: "white",
-                boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
-                transition: "all 0.3s ease",
-                transform: "scale(1)",
-                minHeight: "80px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+              onClick={() => {
+                if (isExpanded) {
+                  setSelectedStudent(null);
+                } else {
+                  setSelectedStudent({ ...student, percentage });
+                }
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "scale(1.02)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(0, 0, 0, 0.15)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "scale(1)";
-                e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
-              }}
+              className="bg-white rounded-lg border border-gray-200 cursor-pointer transition-all duration-300 hover:shadow-lg overflow-hidden"
             >
-              <div style={{ textAlign: "center", width: "100%" }}>
-                <h3 style={{ margin: "0", fontSize: "16px", fontWeight: "bold", color: "#333" }}>
-                  {student.name}
-                </h3>
-                <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#999" }}>
-                  Click to view details
+              {/* Title Section - Always Visible */}
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-gray-200">
+                <h3 className="text-lg font-bold text-gray-800 truncate">{student.name}</h3>
+                <p className="text-xs text-gray-600 mt-1">
+                  {isExpanded ? "Click to collapse" : "Click to view details"}
                 </p>
               </div>
+
+              {/* Expanded Details Section */}
+              {isExpanded && (
+                <div className="p-4 space-y-4">
+                  {/* Score Summary */}
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-semibold text-gray-700">Overall Score</span>
+                      <span className="text-2xl font-bold text-blue-600">{percentage}%</span>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      {totalScore} / {totalQuestions} points
+                    </p>
+                  </div>
+
+                  {/* Percentage Indicator Bar */}
+                  <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      style={{
+                        width: `${percentage}%`,
+                        backgroundColor:
+                          percentage >= 70 ? "#10b981" : percentage >= 40 ? "#f59e0b" : "#ef4444",
+                      }}
+                      className="h-full transition-all duration-500"
+                    ></div>
+                  </div>
+
+                  {/* Subcategory Breakdown */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                      Subcategory Performance
+                    </h4>
+                    {student.subcategoryScores.map((sub, subIdx) => {
+                      const subPercentage = Math.round(
+                        (sub.score / sub.totalQuestions) * 100
+                      );
+                      return (
+                        <div key={subIdx} className="bg-gray-50 p-2 rounded">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-semibold text-gray-700">
+                              {sub.subcategory}
+                            </span>
+                            <span className="text-xs font-bold text-blue-600">
+                              {sub.score}/{sub.totalQuestions}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-300 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              style={{
+                                width: `${subPercentage}%`,
+                                backgroundColor:
+                                  subPercentage >= 70
+                                    ? "#10b981"
+                                    : subPercentage >= 40
+                                    ? "#f59e0b"
+                                    : "#ef4444",
+                              }}
+                              className="h-full transition-all duration-500"
+                            ></div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* ======================= DETAIL MODAL ======================= */}
-      {selectedStudent && (
-        <div 
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 1000,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-          }}
-          onClick={() => setSelectedStudent(null)}
-        >
-          <div
-            style={{
-              backgroundColor: "white",
-              borderRadius: "8px",
-              boxShadow: "0 4px 6px rgba(0, 0, 0, 0.1)",
-              padding: "24px",
-              maxWidth: "600px",
-              width: "100%",
-              maxHeight: "80vh",
-              overflowY: "auto",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: "20px",
-              paddingBottom: "12px",
-              borderBottom: "1px solid #e0e0e0"
-            }}>
-              <div>
-                <h3 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: "bold" }}>
-                  {selectedStudent.name}
-                </h3>
-                <p style={{ margin: 0, fontSize: "13px", color: "#999" }}>
-                  Roll No: {selectedStudent.rollNo}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedStudent(null)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: "24px",
-                  cursor: "pointer",
-                  color: "#999",
-                  padding: "0",
-                  width: "30px",
-                  height: "30px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center"
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Half Circle Gauge */}
-            <div style={{ textAlign: "center", marginBottom: "24px" }}>
-              <HalfCircleGauge percentage={selectedStudent.percentage} />
-            </div>
-
-            {/* Score Details */}
-            <div style={{ marginBottom: "20px" }}>
-              <h5 style={{ marginBottom: "12px", fontSize: "16px", fontWeight: "bold" }}>
-                Subcategory Performance
-              </h5>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "12px" }}>
-                {selectedStudent.subcategoryScores.map((sub, idx) => {
-                  const subPercentage = Math.round(
-                    (sub.score / sub.totalQuestions) * 100
-                  );
-                  return (
-                    <div key={idx} style={{
-                      border: "1px solid #e0e0e0",
-                      borderRadius: "6px",
-                      backgroundColor: "#f5f5f5",
-                      padding: "12px"
-                    }}>
-                      <p style={{ fontWeight: "bold", marginBottom: "8px", margin: "0 0 8px 0" }}>
-                        {sub.subcategory}
-                      </p>
-                      <p style={{ marginBottom: "8px", margin: "0 0 8px 0" }}>
-                        <strong>Score:</strong> {sub.score} / {sub.totalQuestions}
-                      </p>
-                      <div style={{
-                        backgroundColor: "#ddd",
-                        borderRadius: "4px",
-                        height: "20px",
-                        overflow: "hidden",
-                        marginTop: "8px"
-                      }}>
-                        <div style={{
-                          height: "100%",
-                          width: `${subPercentage}%`,
-                          backgroundColor: subPercentage >= 70
-                            ? "#28a745"
-                            : subPercentage >= 40
-                            ? "#ffc107"
-                            : "#dc3545",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "white",
-                          fontSize: "12px",
-                          fontWeight: "bold",
-                          transition: "width 1s ease"
-                        }}>
-                          {subPercentage > 5 && `${subPercentage}%`}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Overall Summary */}
-            <div style={{
-              backgroundColor: "#f5f5f5",
-              padding: "12px",
-              borderRadius: "6px",
-              marginBottom: "16px"
-            }}>
-              <p style={{ marginBottom: "8px", margin: "0 0 8px 0" }}>
-                <strong>Total Score:</strong> {selectedStudent.totalScore} /{" "}
-                {selectedStudent.subcategoryScores.reduce(
-                  (acc, s) => acc + s.totalQuestions,
-                  0
-                )}
-              </p>
-              <p style={{ margin: 0 }}>
-                <strong>Overall Percentage:</strong> {selectedStudent.percentage}%
-              </p>
-            </div>
-
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={() => setSelectedStudent(null)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                backgroundColor: "#6c757d",
-                color: "white",
-                border: "none",
-                borderRadius: "6px",
-                cursor: "pointer",
-                fontSize: "14px",
-                fontWeight: "bold"
-              }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

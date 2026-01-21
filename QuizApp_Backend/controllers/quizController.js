@@ -435,78 +435,176 @@ export const unblockStudent = async (req, res) => {
 };
 
 // ---------------- Block student ----------------
+// ✅ Block student ----------------
+// NEW: blockStudent
+
+
+
 export const blockStudent = async (req, res) => {
   const { quizId } = req.params;
   const studentId = req.user?.id;
 
+  console.log("\n╔════════════════════════════════════════╗");
+  console.log("║     [BLOCK STUDENT] REQUEST START       ║");
+  console.log("╚════════════════════════════════════════╝");
+  console.log("📌 StudentID:", studentId);
+  console.log("📌 QuizID:", quizId);
+
   if (!quizId || !studentId) {
+    console.error("❌ MISSING REQUIRED FIELDS");
     return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
   }
 
   try {
+    // STEP 1: Fetch quiz
+    console.log("\n[1] Fetching quiz config...");
     const quizConfig = await QuizConfig.findByPk(quizId);
+
     if (!quizConfig) {
+      console.error("❌ Quiz not found");
       return res.status(404).json({ success: false, message: "Quiz not found" });
     }
+    console.log("✅ Quiz found");
+
+    // STEP 2: Get current blocked array
+    console.log("\n[2] Getting current blocked array...");
+    let blocked = quizConfig.blocked;
+    console.log("   Raw value type:", typeof blocked);
+    console.log("   Is array:", Array.isArray(blocked));
+    console.log("   Value:", blocked);
+
+    // Ensure it's always an array
+    if (!Array.isArray(blocked)) {
+      blocked = [];
+      console.log("   ⚠️ NOT an array, reset to []");
+    }
+
+    console.log("   Final blocked array length:", blocked.length);
 
     const now = new Date();
 
-    let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
+    // STEP 3: Clean expired blocks
+    console.log("\n[3] Cleaning expired blocks...");
+    const beforeClean = blocked.length;
+    blocked = blocked.filter(b => {
+      if (!b || !b.expiresAt) return false;
+      return new Date(b.expiresAt) > now;
+    });
+    const expiredCount = beforeClean - blocked.length;
+    console.log("   Removed:", expiredCount, "expired blocks");
+    console.log("   Remaining:", blocked.length, "active blocks");
 
-    // ✅ Remove expired blocks and persist cleanup
-    blocked = blocked.filter(b => new Date(b.expiresAt) > now);
-
-    const existing = blocked.find(
-      b => String(b.studentId) === String(studentId)
-    );
-
+    // STEP 4: Check if already blocked
+    console.log("\n[4] Checking if student already blocked...");
+    const existing = blocked.find(b => Number(b.studentId) === Number(studentId));
     if (existing) {
-      const remainingSeconds = Math.ceil(
-        (new Date(existing.expiresAt) - now) / 1000
-      );
-
+      const remainingSeconds = Math.ceil((new Date(existing.expiresAt) - now) / 1000);
+      console.log("   ⚠️ Already blocked with", remainingSeconds, "seconds remaining");
       return res.json({
         success: true,
         alreadyBlocked: true,
-        remainingSeconds,
-        expiresAt: new Date(existing.expiresAt).getTime()
+        remainingSeconds: Math.max(0, remainingSeconds),
+        expiresAt: new Date(existing.expiresAt).getTime(),
       });
     }
+    console.log("   ✅ Not blocked yet, creating new block...");
 
+    // STEP 5: Create new block
+    console.log("\n[5] Creating new block entry...");
     const BLOCK_DURATION = 30;
     const expiresAt = new Date(now.getTime() + BLOCK_DURATION * 1000);
 
-    blocked.push({
-      studentId,
-      expiresAt: expiresAt.toISOString() // ✅ JSON safe
-    });
+    const newBlock = {
+      studentId: Number(studentId),
+      expiresAt: expiresAt.toISOString()
+    };
 
-    // ✅ Save the cleaned blocked array to database
-    await quizConfig.update({ blocked });
+    console.log("   New block:", JSON.stringify(newBlock));
+    blocked.push(newBlock);
+    console.log("   Array length after push:", blocked.length);
 
-    res.json({
+    // STEP 6: Save to database using INSTANCE method (not update)
+    console.log("\n[6] Saving to database...");
+    quizConfig.blocked = blocked;  // ✅ This triggers the model setter
+    const saveResult = await quizConfig.save();
+    console.log("   ✅ Save result - updatedAt:", saveResult.updatedAt);
+
+    // STEP 7: Verify save - CRITICAL: Wait and check multiple times
+    console.log("\n[7] Verifying save...");
+    let verifyQuiz = await QuizConfig.findByPk(quizId);
+    let verifyBlocked = verifyQuiz.blocked;
+    
+    console.log("   Verified blocked type:", typeof verifyBlocked);
+    console.log("   Verified blocked isArray:", Array.isArray(verifyBlocked));
+    console.log("   Verified blocked length:", verifyBlocked?.length || 0);
+    console.log("   Verified blocked content:", JSON.stringify(verifyBlocked));
+
+    // STEP 8: Confirm block exists - if not, retry
+    console.log("\n[8] Final confirmation...");
+    let blockConfirmed = Array.isArray(verifyBlocked) && 
+                         verifyBlocked.some(b => Number(b.studentId) === Number(studentId));
+
+    if (!blockConfirmed) {
+      console.warn("   ⚠️ Block not confirmed on first check, retrying...");
+      // Wait a tiny bit and check again
+      await new Promise(resolve => setTimeout(resolve, 100));
+      verifyQuiz = await QuizConfig.findByPk(quizId);
+      verifyBlocked = verifyQuiz.blocked;
+      blockConfirmed = Array.isArray(verifyBlocked) && 
+                       verifyBlocked.some(b => Number(b.studentId) === Number(studentId));
+      console.log("   Retry result:", blockConfirmed);
+    }
+
+    if (blockConfirmed) {
+      console.log("   ✅✅✅ BLOCK SUCCESSFULLY SAVED AND VERIFIED ✅✅✅");
+    } else {
+      console.error("   ❌❌❌ BLOCK NOT IN DATABASE - FAILED ❌❌❌");
+    }
+
+    console.log("\n╔════════════════════════════════════════╗");
+    console.log("║      [BLOCK STUDENT] SUCCESS            ║");
+    console.log("╚════════════════════════════════════════╝\n");
+
+    return res.json({
       success: true,
       blocked: true,
       remainingSeconds: BLOCK_DURATION,
-      expiresAt: expiresAt.getTime()
+      expiresAt: expiresAt.getTime(),
+      message: `Student blocked for ${BLOCK_DURATION} seconds`
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("\n❌❌❌ [BLOCK STUDENT] EXCEPTION ❌❌❌");
+    console.error("Error message:", err.message);
+    console.error("Error stack:", err.stack);
+    console.log("╚════════════════════════════════════════╝\n");
+    
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: err.message
+    });
   }
 };
 
 
 
+// Export all controllers
+export default {
 
-// ---------------- Get block status ----------------
+ 
+  blockStudent, // <- make sure it’s included here if using default export
+};
+
+
+// ✅ Get block status ----------------
 export const getBlockStatus = async (req, res) => {
   const { quizId } = req.params;
-  const studentId = req.user?.id;
+  const studentId = Number(req.user?.id);
 
-  if (!quizId || !studentId) {
-    return res.status(400).json({ success: false, message: "Quiz ID and Student ID required" });
+  if (!studentId || isNaN(studentId)) {
+    console.error("[GET_BLOCK_STATUS] Invalid studentId:", req.user?.id);
+    return res.status(401).json({ success: false, message: "Unauthorized" });
   }
 
   try {
@@ -516,36 +614,52 @@ export const getBlockStatus = async (req, res) => {
     }
 
     const now = new Date();
+    let blocked = quizConfig.blocked || [];
 
-    let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
+    // ✅ Remove expired blocks and persist cleanup
+    const activeBlocks = blocked.filter(b => {
+      if (!b.expiresAt) return false;
+      return new Date(b.expiresAt) > now;
+    });
 
-    blocked = blocked.filter(b => new Date(b.expiresAt) > now);
+    // Save cleanup if any blocks expired
+    if (activeBlocks.length !== blocked.length) {
+      await quizConfig.update({ blocked: activeBlocks });
+      console.log(`[GET_BLOCK_STATUS] Cleaned expired blocks for quiz ${quizId}`);
+    }
 
-    // ✅ persist cleanup
-    await quizConfig.update({ blocked });
+    // ✅ Find this student's block (consistent field name)
+    const block = activeBlocks.find(b => Number(b.studentId) === studentId);
 
-    const existing = blocked.find(
-      b => String(b.studentId) === String(studentId)
-    );
-
-    if (existing) {
-      return res.json({
-        success: true,
-        blocked: true,
-        remainingSeconds: Math.ceil(
-          (new Date(existing.expiresAt) - now) / 1000
-        ),
-        expiresAt: new Date(existing.expiresAt).getTime()
+    if (!block) {
+      console.log(`[GET_BLOCK_STATUS] Student ${studentId} is NOT blocked`);
+      return res.json({ 
+        success: true, 
+        blocked: false, 
+        remainingSeconds: 0,
+        expiresAt: 0
       });
     }
 
-    res.json({ success: true, blocked: false, remainingSeconds: 0 });
+    const remainingSeconds = Math.ceil(
+      (new Date(block.expiresAt).getTime() - now.getTime()) / 1000
+    );
+
+    console.log(`[GET_BLOCK_STATUS] Student ${studentId} is BLOCKED for ${remainingSeconds}s`);
+
+    return res.json({
+      success: true,
+      blocked: true,
+      remainingSeconds: Math.max(0, remainingSeconds),
+      expiresAt: new Date(block.expiresAt).getTime()
+    });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: "Internal Server Error" });
+    console.error("[GET_BLOCK_STATUS] Error:", err);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
+
 
 
 
@@ -555,388 +669,6 @@ export const getBlockStatus = async (req, res) => {
 import { Op } from "sequelize";
 
 import Faculty from "../models/Faculty.js";
-
-// ---------------- GET QUIZ ----------------
-// export const getQuiz = async (req, res) => {
-//   const { quizId } = req.params;
-//  const studentId = req.student?.studentId; // matches middleware
-
-// console.log("Fetching quiz:", { quizId, studentId });
-//   if (!studentId) return res.status(401).json({ success: false, message: "Unauthorized" });
-
-//   try {
-//     const quizConfig = await QuizConfig.findByPk(quizId, {
-//       include: { model: Faculty, attributes: ["id", "name"] },
-//     });
-
-//     if (!quizConfig) return res.status(404).json({ success: false, message: "QuizConfig not found" });
-
-//     const now = new Date();
-
-//     // Ensure blocked array exists
-//     quizConfig.blocked = quizConfig.blocked || [];
-
-//     // Remove expired blocks
-//     quizConfig.blocked = quizConfig.blocked.filter(block => block.expiresAt && new Date(block.expiresAt) > now);
-
-//     const existingBlock = quizConfig.blocked.find(block => block.student === studentId);
-//     let blocked = false;
-//     let remainingSeconds = 0;
-
-//     if (existingBlock) {
-//       blocked = true;
-//       remainingSeconds = Math.ceil((new Date(existingBlock.expiresAt) - now) / 1000);
-//     }
-
-//     // Find or create progress
-//     let progress = await QuizProgress.findOne({ where: { studentId, quizConfigId: quizId } });
-//     if (!progress) {
-//       progress = await QuizProgress.create({
-//         studentId,
-//         quizConfigId: quizId,
-//         currentQuestionIndex: 0,
-//         answers: JSON.stringify([]),
-//         completed: false,
-//         status: false,
-//         timeLeft: quizConfig.timeLimit * 60,
-//       });
-//     }
-
-//     // Fetch questions (adapted for Sequelize JSON field)
-//     const selectionsWithQuestions = await Promise.all(
-//       quizConfig.selections.map(async (selection) => {
-//         const allQuizzes = await Quiz.findAll({
-//           where: {
-//             category: quizConfig.category,
-//             subcategory: selection.subcategory,
-//           },
-//         });
-
-//         let questions = [];
-//         allQuizzes.forEach((quiz) => {
-//           if (Array.isArray(quiz.questions)) questions.push(...quiz.questions);
-//         });
-
-//         const uniqueQuestions = Array.from(
-//           new Map(
-//             questions
-//               .filter(q => q && q.id && q.question && Array.isArray(q.options))
-//               .map(q => [q.id.toString(), q])
-//           ).values()
-//         );
-
-//         const shuffled = seededShuffle(uniqueQuestions, studentId);
-//         const selectedQuestions = shuffled.slice(0, selection.questionCount);
-
-//         const answers = JSON.parse(progress.answers || "[]");
-
-//         const questionsForStudent = selectedQuestions.map((q) => {
-//           const savedOption = answers.find(a => a.questionId === q.id)?.selectedOption ?? null;
-//           return {
-//             id: q.id,
-//             question: q.question,
-//             options: q.options,
-//             selectedOption: savedOption,
-//           };
-//         });
-
-//         return {
-//           subcategory: selection.subcategory,
-//           questions: questionsForStudent,
-//         };
-//       })
-//     );
-
-//     return res.json({
-//       success: true,
-//       message: "Quiz fetched successfully",
-//       blocked,
-//       remainingSeconds,
-//       data: {
-//         quizConfig,
-//         progress: {
-//           currentQuestionIndex: progress.currentQuestionIndex,
-//           timeLeft: progress.timeLeft,
-//           answers: JSON.parse(progress.answers || "[]"),
-//         },
-//         serverTime: Date.now(),
-//       },
-//     });
-//   } catch (error) {
-//     console.error(error);
-//     return res.status(500).json({ success: false, message: error.message });
-//   }
-// };
-
-
-// Helper: shuffle questions consistently per student
-
-
-
-
-/**
- * Seeded shuffle function: always returns the same shuffled order for a given seed
- */
-
-
-// ================= GET QUIZ =================
-// export const getQuiz = async (req, res) => {
-//   const { quizId } = req.params;
-//   const studentId = req.user?.id;
-
-//   if (!studentId) {
-//     return res.status(401).json({ success: false, message: "Unauthorized" });
-//   }
-
- 
-
-//   try {
-//     // Fetch quiz config with faculty
-//     const quizConfig = await QuizConfig.findByPk(quizId, {
-//       include: {
-//         model: Faculty,
-//         as: "faculty",
-//         attributes: ["id", "name", "email", "department"],
-//       },
-//     });
-
-//     if (!quizConfig) {
-//       return res.status(404).json({ success: false, message: "QuizConfig not found" });
-//     }
-
-//     // Ensure blocked array exists
-//     quizConfig.blocked = quizConfig.blocked || [];
-
-//     // Remove expired blocks
-//     const now = new Date();
-//     quizConfig.blocked = quizConfig.blocked.filter(
-//       (block) => block.expiresAt && new Date(block.expiresAt) > now
-//     );
-
-//     await quizConfig.update({ blocked: quizConfig.blocked });
-
-//     // Check if student is blocked
-//     const existingBlock = quizConfig.blocked.find((b) => b.studentId === studentId);
-//     if (existingBlock) {
-//       const remainingSeconds = Math.ceil(
-//         (new Date(existingBlock.expiresAt) - now) / 1000
-//       );
-
-     
-
-//       return res.json({
-//         success: true,
-//         message: "Quiz fetched successfully",
-//         blocked: true,
-//         remainingSeconds,
-//         data: {
-//           quizConfig: {
-//             id: quizConfig.id,
-//             title: quizConfig.title,
-//             category: quizConfig.category,
-//             timeLimit: quizConfig.timeLimit,
-//             selections: quizConfig.selections,
-//             createdBy: quizConfig.faculty,
-//           },
-//           selectionsWithQuestions: [],
-//           progress: {
-//             currentQuestionIndex: 0,
-//             timeLeft: 0,
-//             completed: false,
-//             answers: [],
-//           },
-//           serverTime: Date.now(),
-//         },
-//       });
-//     }
-
-//     // Find or create progress
-//     let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
-//     if (!progress) {
-//       try {
-//         progress = await QuizProgress.create({
-//           studentId,
-//           quizId,
-//           currentQuestionIndex: 0,
-//           completed: false,
-//           status: false,
-//           timeLeft: quizConfig.timeLimit * 60,
-//           answers: [],
-//         });
-//         console.log(`[DEBUG] Created new progress for student ${studentId}`);
-//       } catch (createErr) {
-//         // If it fails due to duplicate, fetch the existing record
-//         if (createErr.name === 'SequelizeUniqueConstraintError') {
-//           console.log(`[DEBUG] Progress already exists, fetching existing record for student ${studentId}`);
-//           progress = await QuizProgress.findOne({ where: { studentId, quizId } });
-//           if (!progress) {
-//             throw new Error(`[CRITICAL] Failed to fetch existing progress for student ${studentId}`);
-//           }
-//         } else {
-//           throw createErr;
-//         }
-//       }
-//     } else {
-//       console.log(`[DEBUG] Existing progress found:`, progress.answers);
-//     }
-
-//     // Safety check
-//     if (!progress) {
-//       return res.status(500).json({ success: false, message: "Failed to initialize quiz progress" });
-//     }
-
-//     const savedAnswers = progress.answers || [];
-//     const selectionsWithQuestions = [];
-
-    
-
-//     const allQuizzes = await Quiz.findAll();
-   
-
-//     allQuizzes.forEach((quiz, idx) => {
-//       console.log(`[DEBUG] Quiz ${idx}:`, {
-//         id: quiz.id,
-//         categoriesCount: quiz.categories?.length || 0,
-//         categories: quiz.categories?.map(c => ({
-//           category: c.category,
-//           subcategory: c.subcategory,
-//           questionCount: c.questions?.length || 0
-//         }))
-//       });
-//     });
-
-//     for (const selection of quizConfig.selections) {
-//       let questions = [];
-
-     
-
-//       allQuizzes.forEach((quiz, quizIdx) => {
-//         let categories = [];
-//         try {
-//           categories = Array.isArray(quiz.categories) ? quiz.categories : JSON.parse(quiz.categories);
-//         } catch (err) {
-//           console.error(`[ERROR] Invalid categories JSON for quiz ${quiz.id}:`, err.message);
-//           return;
-//         }
-
-       
-
-//         categories.forEach((cat, catIdx) => {
-//           console.log(`[DEBUG]     Category ${catIdx}: "${cat.category}" / "${cat.subcategory}"`);
-//           console.log(`[DEBUG]       Comparing "${cat.subcategory}" === "${selection.subcategory}" ? ${cat.subcategory === selection.subcategory}`);
-//           console.log(`[DEBUG]       Questions array is array? ${Array.isArray(cat.questions)}`);
-//           console.log(`[DEBUG]       Questions length: ${cat.questions?.length || 0}`);
-
-//           if (cat.subcategory === selection.subcategory && Array.isArray(cat.questions)) {
-//             console.log(`[DEBUG]   ✅ MATCH! Adding ${cat.questions.length} questions`);
-//             questions.push(...cat.questions);
-//           }
-//         });
-//       });
-
-   
-
-//       // Remove duplicate questions by text
-//       const uniqueQuestions = Array.from(
-//         new Map(
-//           questions
-//             .filter((q) => {
-//               const isValid = q && q.question && Array.isArray(q.options);
-//               if (!isValid) console.log(`[DEBUG]   Filtered out question:`, q);
-//               return isValid;
-//             })
-//             .map((q) => [q.question, q])
-//         ).values()
-//       );
-
-     
-
-//       // Shuffle
-//       const shuffled = seededShuffle(uniqueQuestions, studentId);
-
-//       const selectedQuestions = shuffled.slice(0, selection.questionCount);
-
-
-//       // Map saved answers - use a consistent question ID based on question text
-//       const questionsForStudent = selectedQuestions.map((q, index) => {
-//         // Create a consistent ID based on question text hash
-//         const questionId = `${selection.subcategory}_${index}`;
-//         const savedAnswer = savedAnswers.find((a) => a.questionId === questionId);
-        
-//         return {
-//           id: questionId,
-//           question: q.question,
-//           options: q.options,
-//           answer: q.answer,
-//           selectedOption: savedAnswer?.selectedOption ?? null,
-//         };
-//       });
-
-//       console.log(`[DEBUG] Final questions for student in "${selection.subcategory}": ${questionsForStudent.length}`);
-      
-//       // 🔴 LOG WHAT WE'RE SENDING TO FRONTEND
-//       console.log(`[DEBUG] Sending ${selection.subcategory} questions to student ${studentId}:`);
-//       questionsForStudent.forEach((q, idx) => {
-//         console.log(`[DEBUG]   Q${idx} (ID: ${q.id}): "${q.question}"`);
-//         console.log(`[DEBUG]     Options: ${JSON.stringify(q.options)}`);
-//         console.log(`[DEBUG]     Correct Answer: "${q.answer}"`);
-//         console.log(`[DEBUG]     Student's saved answer: "${q.selectedOption}"`);
-//       });
-
-//       selectionsWithQuestions.push({
-//         subcategory: selection.subcategory,
-//         questions: questionsForStudent,
-//       });
-//     }
-
- 
-
-//     // 🔴 Store the questionMap in progress for consistent scoring
-//     const questionMapForStorage = {};
-//     selectionsWithQuestions.forEach(selection => {
-//       selection.questions.forEach(q => {
-//         questionMapForStorage[q.id] = {
-//           question: q.question,
-//           options: q.options,
-//           answer: q.answer
-//         };
-//       });
-//     });
-
-//     // Update progress with the questionMap
-//     progress.questionMap = questionMapForStorage;
-//     await progress.save();
-//     console.log(`[DEBUG] Stored questionMap with ${Object.keys(questionMapForStorage).length} questions in QuizProgress`);
-
-//     return res.json({
-//       success: true,
-//       message: "Quiz fetched successfully",
-//       blocked: false,
-//       remainingSeconds: 0,
-//       data: {
-//         quizConfig: {
-//           id: quizConfig.id,
-//           title: quizConfig.title,
-//           category: quizConfig.category,
-//           timeLimit: quizConfig.timeLimit,
-//           selections: quizConfig.selections,
-//           createdBy: quizConfig.faculty,
-//         },
-//         selectionsWithQuestions,
-//         progress: {
-//           currentQuestionIndex: progress.currentQuestionIndex,
-//           timeLeft: progress.timeLeft,
-//           completed: progress.completed,
-//           answers: savedAnswers,
-//         },
-//         serverTime: Date.now(),
-//       },
-//     });
-//   } catch (err) {
-//     console.error("[ERROR] getQuiz error:", err);
-//     return res.status(500).json({ success: false, message: err.message });
-//   }
-// };
 import crypto from "crypto";
 
 const generateQuestionId = (subcategory, question) => {
@@ -967,8 +699,10 @@ export const getQuiz = async (req, res) => {
       return res.status(404).json({ success: false, message: "QuizConfig not found" });
     }
 
-    // ================= PROGRESS (FETCH EARLY) =================
-    let progress = await QuizProgress.findOne({ where: { studentId, quizId } });
+    // ================= FETCH / CREATE PROGRESS =================
+    let progress = await QuizProgress.findOne({
+      where: { studentId, quizId },
+    });
 
     if (!progress) {
       progress = await QuizProgress.create({
@@ -976,15 +710,93 @@ export const getQuiz = async (req, res) => {
         quizId,
         currentQuestionIndex: 0,
         completed: false,
-        status: false,
         timeLeft: quizConfig.timeLimit * 60,
         answers: [],
         questionMap: {},
       });
     }
 
-    // ================= CHECK IF ALREADY COMPLETED =================
+    // ================= BLOCK CHECK =================
+    const now = Date.now();
+    console.log("\n📋 [GET QUIZ] BLOCK CHECK START");
+    console.log("   StudentID:", studentId, "| QuizID:", quizId);
+    
+    let blocked = quizConfig.blocked;
+    console.log("   Blocked type:", typeof blocked);
+    console.log("   Is array:", Array.isArray(blocked));
+    console.log("   Raw blocked:", blocked);
+
+    if (!Array.isArray(blocked)) {
+      blocked = [];
+      console.log("   ⚠️ Not array, reset to []");
+    }
+
+    // Remove expired blocks (do NOT save yet, just filter)
+    const activeBlocks = blocked.filter(b => {
+      if (!b || !b.expiresAt) return false;
+      const expiry = new Date(b.expiresAt).getTime();
+      return expiry > now;
+    });
+
+    console.log("   Active blocks after filter:", activeBlocks.length);
+    console.log("   Active blocks content:", JSON.stringify(activeBlocks));
+
+    // Check if this student is blocked
+    const block = activeBlocks.find(b => Number(b.studentId) === Number(studentId));
+    console.log("   Block found for student:", block ? "YES ✅" : "NO ❌");
+
+    if (block) {
+      console.log("   Block expiresAt:", block.expiresAt);
+      console.log("   Current time:", new Date(now).toISOString());
+      
+      const remainingSeconds = Math.ceil((new Date(block.expiresAt).getTime() - now) / 1000);
+      console.log("   Remaining seconds:", remainingSeconds);
+      console.log("📋 [GET QUIZ] BLOCK CHECK END - STUDENT BLOCKED\n");
+
+      const savedAnswers = progress.answers || [];
+      let selectionsWithQuestions = [];
+
+      if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
+        quizConfig.selections.forEach(sel => {
+          const questions = Object.entries(progress.questionMap)
+            .filter(([_, q]) => q.subcategory === sel.subcategory)
+            .map(([id, q]) => ({
+              id,
+              question: q.question,
+              options: q.options,
+              selectedOption:
+                savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
+            }));
+
+          selectionsWithQuestions.push({
+            subcategory: sel.subcategory,
+            questions,
+          });
+        });
+      }
+
+      return res.json({
+        success: true,
+        blocked: true,
+        remainingSeconds,
+        expiresAt: new Date(block.expiresAt).getTime(),
+        data: {
+          quizConfig,
+          selectionsWithQuestions,
+          progress: {
+            currentQuestionIndex: progress.currentQuestionIndex,
+            timeLeft: progress.timeLeft,
+            completed: progress.completed,
+            answers: savedAnswers,
+          },
+          serverTime: now,
+        },
+      });
+    }
+
+    // ================= ALREADY COMPLETED =================
     if (progress.completed === true) {
+      console.log("📋 [GET QUIZ] BLOCK CHECK END - STUDENT ALREADY COMPLETED\n");
       return res.json({
         success: true,
         isCompleted: true,
@@ -998,76 +810,20 @@ export const getQuiz = async (req, res) => {
             completed: true,
             answers: [],
           },
-          serverTime: Date.now(),
-        },
-      });
-    }
-
-    // ================= BLOCK CHECK =================
-    quizConfig.blocked = quizConfig.blocked || [];
-    const now = new Date();
-
-    quizConfig.blocked = quizConfig.blocked.filter(
-      b => b.expiresAt && new Date(b.expiresAt) > now
-    );
-    await quizConfig.update({ blocked: quizConfig.blocked });
-
-    const block = quizConfig.blocked.find(b => b.studentId === studentId);
-    if (block) {
-      const remainingSeconds = Math.ceil(
-        (new Date(block.expiresAt) - now) / 1000
-      );
-      const savedAnswers = progress.answers || [];
-      
-      // ✅ If student has questions stored, show them even while blocked (for re-login scenario)
-      let selectionsWithQuestions = [];
-      if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
-        quizConfig.selections.forEach(sel => {
-          const qs = Object.entries(progress.questionMap)
-            .filter(([id, q]) => q.subcategory === sel.subcategory)
-            .map(([id, q]) => ({
-              id,
-              question: q.question,
-              options: q.options,
-              selectedOption:
-                savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
-            }));
-
-          selectionsWithQuestions.push({
-            subcategory: sel.subcategory,
-            questions: qs,
-          });
-        });
-      }
-
-      return res.json({
-        success: true,
-        blocked: true,
-        remainingSeconds: remainingSeconds,
-        expiresAt: new Date(block.expiresAt).getTime(),
-        data: {
-          quizConfig,
-          selectionsWithQuestions,
-          progress: {
-            currentQuestionIndex: progress.currentQuestionIndex,
-            timeLeft: progress.timeLeft,
-            completed: progress.completed,
-            answers: savedAnswers,
-          },
-          serverTime: Date.now(),
+          serverTime: now,
         },
       });
     }
 
     const savedAnswers = progress.answers || [];
 
-    // ================= REUSE QUESTIONS (CRITICAL FIX) =================
+    // ================= REUSE LOCKED QUESTIONS =================
     if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
       const selectionsWithQuestions = [];
 
       quizConfig.selections.forEach(sel => {
-        const qs = Object.entries(progress.questionMap)
-          .filter(([id, q]) => q.subcategory === sel.subcategory)
+        const questions = Object.entries(progress.questionMap)
+          .filter(([_, q]) => q.subcategory === sel.subcategory)
           .map(([id, q]) => ({
             id,
             question: q.question,
@@ -1078,7 +834,7 @@ export const getQuiz = async (req, res) => {
 
         selectionsWithQuestions.push({
           subcategory: sel.subcategory,
-          questions: qs,
+          questions,
         });
       });
 
@@ -1095,12 +851,12 @@ export const getQuiz = async (req, res) => {
             completed: progress.completed,
             answers: savedAnswers,
           },
-          serverTime: Date.now(),
+          serverTime: now,
         },
       });
     }
 
-    // ================= GENERATE QUESTIONS (ONCE) =================
+    // ================= GENERATE QUESTIONS (FIRST TIME ONLY) =================
     const allQuizzes = await Quiz.findAll();
     const selectionsWithQuestions = {};
     const questionMap = {};
@@ -1125,7 +881,7 @@ export const getQuiz = async (req, res) => {
         new Map(pool.map(q => [q.question + JSON.stringify(q.options), q])).values()
       );
 
-      // 🔥 STRONG SEED (quizId + studentId)
+      // Seeded shuffle → same questions after refresh
       const shuffled = seededShuffle(pool, `${quizId}_${studentId}`);
       const selected = shuffled.slice(0, selection.questionCount);
 
@@ -1148,9 +904,11 @@ export const getQuiz = async (req, res) => {
       });
     }
 
-    // ================= SAVE LOCKED QUESTIONS =================
+    // ================= SAVE QUESTION MAP =================
     progress.questionMap = questionMap;
     await progress.save();
+
+    console.log("📋 [GET QUIZ] BLOCK CHECK END - STUDENT NOT BLOCKED\n");
 
     return res.json({
       success: true,
@@ -1167,7 +925,7 @@ export const getQuiz = async (req, res) => {
           completed: progress.completed,
           answers: savedAnswers,
         },
-        serverTime: Date.now(),
+        serverTime: now,
       },
     });
 
@@ -1178,43 +936,64 @@ export const getQuiz = async (req, res) => {
 };
 
 
+
 // ================= SAVE PROGRESS =================
 export const saveProgress = async (req, res) => {
-  const studentId = parseInt(req.user?.id, 10); // ✅ convert to integer
-  const quizId = parseInt(req.params.quizId, 10);  // ✅ convert to integer
+  const studentId = req.user?.id; // ✅ Keep as is (from auth middleware)
+  const quizId = req.params.quizId; // ✅ Keep as STRING (UUID format)
   const { currentQuestionIndex, answers, timeLeft } = req.body;
 
-  if (!studentId) {
-    return res.status(401).json({ success: false, message: "Unauthorized" });
+  // ✅ Validate inputs
+  if (!studentId || isNaN(parseInt(studentId, 10))) {
+    console.error("[SAVE_PROGRESS] Invalid studentId:", studentId);
+    return res.status(401).json({ success: false, message: "Unauthorized - Invalid student ID" });
+  }
+
+  if (!quizId || typeof quizId !== "string" || quizId.trim().length === 0) {
+    console.error("[SAVE_PROGRESS] Invalid quizId:", quizId);
+    return res.status(400).json({ success: false, message: "Bad request - Invalid quiz ID" });
+  }
+
+  if (typeof currentQuestionIndex !== "number" || currentQuestionIndex < 0) {
+    console.error("[SAVE_PROGRESS] Invalid currentQuestionIndex:", currentQuestionIndex);
+    return res.status(400).json({ success: false, message: "Bad request - Invalid question index" });
+  }
+
+  if (!Array.isArray(answers)) {
+    console.error("[SAVE_PROGRESS] Invalid answers format:", answers);
+    return res.status(400).json({ success: false, message: "Bad request - Answers must be an array" });
+  }
+
+  if (typeof timeLeft !== "number" || timeLeft < 0) {
+    console.error("[SAVE_PROGRESS] Invalid timeLeft:", timeLeft);
+    return res.status(400).json({ success: false, message: "Bad request - Invalid time left" });
   }
 
   try {
     let progress = await QuizProgress.findOne({
-      where: { studentId, quizId }
+      where: { studentId: parseInt(studentId, 10), quizId }
     });
 
-    const formattedAnswers = Array.isArray(answers)
-      ? answers.map(ans => ({
-          questionId: ans.questionId, // Use the full questionId sent by frontend (subcategory_index)
-          selectedOption: ans.selectedOption ?? null
-        }))
-      : [];
+    const formattedAnswers = answers.map(ans => ({
+      questionId: ans.questionId, // Use the full questionId sent by frontend (subcategory_index)
+      selectedOption: ans.selectedOption ?? null
+    }));
 
     if (!progress) {
       progress = await QuizProgress.create({
-        studentId,
-        quizId,
-        currentQuestionIndex: typeof currentQuestionIndex === "number" ? currentQuestionIndex : 0,
+        studentId: parseInt(studentId, 10),
+        quizId: quizId.trim(), // ✅ Ensure string is trimmed
+        currentQuestionIndex,
         answers: formattedAnswers,
-        timeLeft: Math.max(0, timeLeft)
+        timeLeft: Math.max(0, Math.floor(timeLeft))
       });
+      console.log(`[SAVE_PROGRESS] Created new progress for student ${studentId}, quiz ${quizId}`);
     } else {
-      if (typeof currentQuestionIndex === "number") {
-        progress.currentQuestionIndex = currentQuestionIndex;
-      }
+      progress.currentQuestionIndex = currentQuestionIndex;
       progress.answers = formattedAnswers;
-      progress.timeLeft = Math.max(0, timeLeft);
+      progress.timeLeft = Math.max(0, Math.floor(timeLeft));
       await progress.save();
+      console.log(`[SAVE_PROGRESS] Updated progress for student ${studentId}, quiz ${quizId}`);
     }
 
     return res.json({
@@ -1227,7 +1006,7 @@ export const saveProgress = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Save progress error:", err);
+    console.error("[SAVE_PROGRESS] Database error:", err.message);
     return res.status(500).json({
       success: false,
       message: "Server error",

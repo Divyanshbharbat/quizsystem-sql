@@ -115,23 +115,35 @@ const StudentLogin = () => {
       // ✅ Check if student is blocked
       if (errorData?.data?.blocked === true) {
         const remainingSeconds = errorData.data.remainingSeconds || 0;
-        setIsBlocked(true);
-        setError(`You are blocked from this quiz. Please wait ${remainingSeconds} seconds before retrying.`);
+        const expiresAt = errorData.data.expiresAt || Date.now() + (remainingSeconds * 1000);
+        
+        // Store block data in localStorage and navigate to block wait page
+        localStorage.setItem("blockData", JSON.stringify({
+          quizId: quizId,
+          expiresAt: expiresAt,
+          remainingSeconds: remainingSeconds,
+          studentId: uid
+        }));
+        
         toast.error(`Blocked for ${remainingSeconds} more seconds`);
+        // Navigate to block waiting screen
+        navigate(`/blocked-wait/${quizId}`, { replace: true });
         return;
       }
       
-      // Show specific error messages
+      // ✅ Show specific error messages based on field
+      const errorField = errorData?.errorField;
       const msg = errorData?.message || "";
-      if (msg.includes("Invalid password") || msg.includes("password")) {
-        setError("Wrong password");
-        toast.error("Wrong password");
-      } else if (msg.includes("not found") || msg.includes("No student")) {
-        setError("Wrong student ID");
-        toast.error("Wrong student ID");
+      
+      if (errorField === "password") {
+        setError("❌ Wrong Password");
+        toast.error("❌ Wrong Password");
+      } else if (errorField === "uid") {
+        setError("❌ Wrong Student ID");
+        toast.error("❌ Wrong Student ID");
       } else if (msg.includes("quiz") || msg.includes("Quiz")) {
-        setError("Wrong quiz ID");
-        toast.error("Wrong quiz ID");
+        setError("❌ Wrong Quiz ID");
+        toast.error("❌ Wrong Quiz ID");
       } else {
         setError(msg || "Login failed");
         toast.error(msg || "Login failed");

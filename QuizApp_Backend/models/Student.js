@@ -52,6 +52,22 @@ Student.init(
       type: DataTypes.DATE,
       allowNull: true,
     },
+
+    // ✅ CHEATING DETECTION & PROGRESSIVE BLOCKING
+    cheatAttempts: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+    },
+    isPermanentlyBlocked: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+    },
+    permanentBlockReason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   },
   {
     sequelize,

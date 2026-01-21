@@ -1,5 +1,3 @@
-// --- FULL UPDATED CODE STARTS ---
-
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -10,13 +8,56 @@ import toast, { Toaster } from "react-hot-toast";
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [faculties, setFaculties] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sessionFilter, setSessionFilter] = useState("");
-  const [filteredFaculties, setFilteredFaculties] = useState([]);
+  const [activeTab, setActiveTab] = useState("students"); // students | faculty
+  
+  // ==================== ADMIN INFO ====================
+  const [adminDept, setAdminDept] = useState("");
+  const [adminName, setAdminName] = useState("");
+  
+  // ==================== STUDENT MANAGEMENT STATE ====================
+  const [students, setStudents] = useState([]);
+  const [searchStudentTerm, setSearchStudentTerm] = useState("");
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedYear, setSelectedYear] = useState(null); // Track selected year
+  const [selectedStudentDept, setSelectedStudentDept] = useState(""); // Department filter for students
+  const [showStudentDetails, setShowStudentDetails] = useState(false);
+  const [studentPasswordModal, setStudentPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [showOldPass, setShowOldPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
 
-  const [selectedFaculty, setSelectedFaculty] = useState(null); 
-  const [viewFaculty, setViewFaculty] = useState(null); 
+  const [formStudent, setFormStudent] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    year: "",
+    department: "",
+  });
+
+  // ==================== YEAR PROMOTION STATE ====================
+  const [promoteModal, setPromoteModal] = useState(false);
+  const [promoteYear, setPromoteYear] = useState(null);
+  const [promoteDepartment, setPromoteDepartment] = useState("");
+  const [skipStudentIds, setSkipStudentIds] = useState("");
+  const [isPromoting, setIsPromoting] = useState(false);
+  const [allDepartments, setAllDepartments] = useState([]);
+
+  // ==================== FACULTY MANAGEMENT STATE ====================
+  const [faculties, setFaculties] = useState([]);
+  const [searchFacultyTerm, setSearchFacultyTerm] = useState("");
+  const [filteredFaculties, setFilteredFaculties] = useState([]);
+  const [selectedFaculty, setSelectedFaculty] = useState(null);
+  const [selectedFacultyDept, setSelectedFacultyDept] = useState(""); // Department filter for faculty
+  const [editingFaculty, setEditingFaculty] = useState(null);
+  const [viewFaculty, setViewFaculty] = useState(null);
+  const [facultyPasswordModal, setFacultyPasswordModal] = useState(false);
+  const [facultyOldPassword, setFacultyOldPassword] = useState("");
+  const [facultyNewPassword, setFacultyNewPassword] = useState("");
+  const [showOldPasswordFaculty, setShowOldPasswordFaculty] = useState(false);
+  const [showNewPasswordFaculty, setShowNewPasswordFaculty] = useState(false);
+  const [sessionFilter, setSessionFilter] = useState("");
 
   const [formFaculty, setFormFaculty] = useState({
     name: "",
@@ -31,55 +72,16 @@ const AdminDashboard = () => {
 
   const [csvFaculties, setCsvFaculties] = useState([]);
 
-  // FACULTY EDIT & PASSWORD STATE
-  const [editingFaculty, setEditingFaculty] = useState(null);
-  const [facultyPasswordModal, setFacultyPasswordModal] = useState(false);
-  const [facultyOldPassword, setFacultyOldPassword] = useState("");
-  const [facultyNewPassword, setFacultyNewPassword] = useState("");
-  const [showOldPassword, setShowOldPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const formScrollRef = useRef();
+  const formRef = useRef();
 
-  // STUDENT MANAGEMENT STATE
-  const [students, setStudents] = useState([]);
-  const [searchStudentTerm, setSearchStudentTerm] = useState("");
-  const [filteredStudents, setFilteredStudents] = useState([]);
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [showStudentDetails, setShowStudentDetails] = useState(false);
-  const [studentPasswordModal, setStudentPasswordModal] = useState(false);
-  const [oldPassword, setOldPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [showOldPass, setShowOldPass] = useState(false);
-  const [showNewPass, setShowNewPass] = useState(false);
-
-  // STUDENT YEAR PROMOTION STATE
-  const [promoteModal, setPromoteModal] = useState(false);
-  const [selectedYearForPromotion, setSelectedYearForPromotion] = useState("");
-  const [excludeStudentsList, setExcludeStudentsList] = useState([]);
-  const [promoting, setPomoting] = useState(false);
-
-  const [formStudent, setFormStudent] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    year: "",
-    department: "",
-  });
-
-  const formRef = useRef(); 
-  const formScrollRef = useRef();  // SCROLL TARGET
-
-  const [adminDept, setAdminDept] = useState("");
-  const [adminName, setAdminName] = useState("");
-  const [showFacultyDetails, setShowFacultyDetails] = useState(false);
-
-  // Smooth Scroll to Form
   const scrollToForm = () => {
     setTimeout(() => {
       formScrollRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 200);
   };
 
-  // Get admin details
+  // ==================== INITIALIZATION ====================
   useEffect(() => {
     const token = localStorage.getItem("facultyDetails");
     if (!token) navigate("/");
@@ -89,30 +91,16 @@ const AdminDashboard = () => {
     setFormFaculty((prev) => ({ ...prev, department: adminDetails.department }));
   }, [navigate]);
 
-  // Fetch faculties
-  const fetchFaculties = async () => {
+  // ==================== STUDENT MANAGEMENT FUNCTIONS ====================
+  const fetchStudents = async (year = null, department = null) => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_APP}/api/faculty/getall`);
-
-      if (res.data.success) {
-        const deptFaculties = res.data.data.filter(
-          (f) => f.department === adminDept && !f.isAdmin
-        );
-        setFaculties(deptFaculties);
+      // If selectedStudentDept is empty, fetch all departments using "*"
+      const deptToFetch = department || selectedStudentDept || "*";
+      let url = `${import.meta.env.VITE_APP}/api/student?department=${deptToFetch}`;
+      if (year) {
+        url += `&year=${year}`;
       }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    if (adminDept) fetchFaculties();
-  }, [adminDept]);
-
-  // ========== STUDENT MANAGEMENT FUNCTIONS ==========
-  const fetchStudents = async () => {
-    try {
-      const res = await axios.get(`${import.meta.env.VITE_APP}/api/student?department=${adminDept}`);
+      const res = await axios.get(url);
       if (res.data.success) {
         setStudents(res.data.data || []);
       }
@@ -123,8 +111,18 @@ const AdminDashboard = () => {
   };
 
   useEffect(() => {
-    if (adminDept) fetchStudents();
-  }, [adminDept]);
+    if (adminDept || selectedStudentDept) {
+      if (selectedYear) {
+        fetchStudents(selectedYear);
+      } else {
+        fetchStudents();
+      }
+    }
+  }, [adminDept, selectedYear, selectedStudentDept]);
+
+  const handleYearClick = (year) => {
+    setSelectedYear(year === selectedYear ? null : year);
+  };
 
   // Filter students
   useEffect(() => {
@@ -140,6 +138,18 @@ const AdminDashboard = () => {
     setFilteredStudents(filtered);
   }, [searchStudentTerm, students]);
 
+  const handleEditStudent = (student) => {
+    setSelectedStudent(student);
+    setFormStudent({
+      name: student.name,
+      email: student.email,
+      phone: student.phone,
+      year: student.year,
+      department: student.department,
+    });
+    setShowStudentDetails(true);
+  };
+
   const handleUpdateStudent = async (e) => {
     e.preventDefault();
     try {
@@ -150,7 +160,8 @@ const AdminDashboard = () => {
       if (res.data.success) {
         toast.success("Student updated successfully");
         setSelectedStudent(null);
-        fetchStudents();
+        setShowStudentDetails(false);
+        fetchStudents(selectedYear);
       }
     } catch (err) {
       console.error(err);
@@ -158,7 +169,7 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleUpdatePassword = async () => {
+  const handleUpdateStudentPassword = async () => {
     if (!newPassword.trim()) {
       toast.error("Password cannot be empty");
       return;
@@ -172,6 +183,7 @@ const AdminDashboard = () => {
         toast.success("Password updated successfully");
         setStudentPasswordModal(false);
         setNewPassword("");
+        setOldPassword("");
       }
     } catch (err) {
       console.error(err);
@@ -186,7 +198,8 @@ const AdminDashboard = () => {
       if (res.data.success) {
         toast.success("Student deleted successfully");
         setSelectedStudent(null);
-        fetchStudents();
+        setShowStudentDetails(false);
+        fetchStudents(selectedYear);
       }
     } catch (err) {
       console.error(err);
@@ -194,109 +207,99 @@ const AdminDashboard = () => {
     }
   };
 
-  // ========== END STUDENT MANAGEMENT FUNCTIONS ==========
-
-  // ========== FACULTY EDIT & PASSWORD MANAGEMENT FUNCTIONS ==========
-  const handleEditFaculty = async (faculty) => {
-    setEditingFaculty(faculty);
-    setFormFaculty({
-      name: faculty.name,
-      email: faculty.email,
-      department: faculty.department,
-      phone: faculty.phone,
-      isAdmin: faculty.isAdmin,
-      subjects: faculty.subjects || [""],
-      session: faculty.session,
-      semester: faculty.semester,
-    });
-  };
-
-  const handleSaveFacultyEdit = async (e) => {
-    e.preventDefault();
-    if (!editingFaculty) return;
-
+  // ==================== YEAR PROMOTION FUNCTIONS ====================
+  const fetchAllDepartments = async () => {
     try {
-      const res = await axios.put(
-        `${import.meta.env.VITE_APP}/api/faculty/update/${editingFaculty.id}`,
-        formFaculty
-      );
-      if (res.data.success) {
-        toast.success("Faculty updated successfully");
-        setEditingFaculty(null);
-        fetchFaculties();
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/student?department=*`);
+      if (res.data.success && res.data.data) {
+        const depts = [...new Set(res.data.data.map(s => s.department))];
+        setAllDepartments(depts);
       }
     } catch (err) {
       console.error(err);
-      const msg = err.response?.data?.message;
-      if (msg === "duplicate_email") {
-        toast.error("Email already exists");
-      } else if (msg === "duplicate_phone") {
-        toast.error("Mobile number already exists");
-      } else {
-        toast.error("Error updating faculty");
-      }
     }
   };
 
-  const handleUpdateFacultyPassword = async () => {
-    if (!facultyNewPassword.trim()) {
-      toast.error("Password cannot be empty");
+  useEffect(() => {
+    fetchAllDepartments();
+  }, []);
+
+  const handlePromoteStudents = async () => {
+    if (!promoteYear || !promoteDepartment) {
+      toast.error("Please select year and department");
       return;
     }
+
+    const excludeIds = skipStudentIds
+      .split(",")
+      .map(id => id.trim())
+      .filter(id => id);
+
+    setIsPromoting(true);
     try {
-      const res = await axios.put(
-        `${import.meta.env.VITE_APP}/api/faculty/admin/password/${editingFaculty.id}`,
-        { password: facultyNewPassword }
+      const res = await axios.post(
+        `${import.meta.env.VITE_APP}/api/student/admin/promote-year`,
+        {
+          currentYear: promoteYear,
+          department: promoteDepartment,
+          excludeStudentIds: excludeIds,
+        }
       );
+
       if (res.data.success) {
-        toast.success("Password updated successfully");
-        setFacultyPasswordModal(false);
-        setFacultyNewPassword("");
-        setFacultyOldPassword("");
+        toast.success(`Successfully promoted ${res.data.promoted} students to year ${promoteYear + 1}`);
+        setPromoteModal(false);
+        setPromoteYear(null);
+        setPromoteDepartment("");
+        setSkipStudentIds("");
+        fetchStudents(selectedYear);
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error updating password");
+      toast.error(err.response?.data?.message || "Error promoting students");
+    } finally {
+      setIsPromoting(false);
     }
   };
 
-  const handleDeleteFacultyClick = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this faculty?")) return;
+  // ==================== FACULTY MANAGEMENT FUNCTIONS ====================
+  const fetchFaculties = async () => {
     try {
-      const res = await axios.delete(`${import.meta.env.VITE_APP}/api/faculty/delete/${id}`);
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/faculty/getall`);
       if (res.data.success) {
-        toast.success("Faculty deleted successfully");
-        setEditingFaculty(null);
-        fetchFaculties();
+        // Filter by selected department or admin's department
+        const deptToFilter = selectedFacultyDept || adminDept;
+        const deptFaculties = res.data.data.filter(
+          (f) => f.department === deptToFilter && !f.isAdmin
+        );
+        setFaculties(deptFaculties);
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error deleting faculty");
+      toast.error("Error fetching faculties");
     }
   };
 
-  // ========== END FACULTY EDIT & PASSWORD MANAGEMENT FUNCTIONS ==========
+  useEffect(() => {
+    if (adminDept) fetchFaculties();
+  }, [adminDept, selectedFacultyDept]);
 
-  // Filtering
+  // Filter faculties
   useEffect(() => {
     let filtered = faculties;
-
-    if (searchTerm.trim()) {
+    if (searchFacultyTerm.trim()) {
       filtered = filtered.filter(
         (f) =>
-          f.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          f.email.toLowerCase().includes(searchTerm.toLowerCase())
+          f.name.toLowerCase().includes(searchFacultyTerm.toLowerCase()) ||
+          f.email.toLowerCase().includes(searchFacultyTerm.toLowerCase())
       );
     }
-
     if (sessionFilter.trim()) {
       filtered = filtered.filter((f) => f.session === sessionFilter);
     }
-
     setFilteredFaculties(filtered);
-  }, [searchTerm, sessionFilter, faculties]);
+  }, [searchFacultyTerm, sessionFilter, faculties]);
 
-  // Handle Inputs
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormFaculty((prev) => ({
@@ -315,7 +318,6 @@ const AdminDashboard = () => {
     setFormFaculty((prev) => ({ ...prev, subjects: [...prev.subjects, ""] }));
   };
 
-  // Add or Update faculty
   const handleAddOrUpdateFaculty = async (e) => {
     e.preventDefault();
 
@@ -325,15 +327,24 @@ const AdminDashboard = () => {
     }
 
     try {
-      if (selectedFaculty) {
+      if (editingFaculty) {
         const res = await axios.put(
-          `${import.meta.env.VITE_APP}/api/faculty/update/${selectedFaculty.id}`,
+          `${import.meta.env.VITE_APP}/api/faculty/update/${editingFaculty.id}`,
           formFaculty
         );
-
         if (res.data.success) {
           toast.success("Faculty updated successfully!");
-          setSelectedFaculty(null);
+          setEditingFaculty(null);
+          setFormFaculty({
+            name: "",
+            email: "",
+            department: adminDept,
+            phone: "",
+            isAdmin: false,
+            subjects: [""],
+            session: "",
+            semester: "",
+          });
           fetchFaculties();
         }
       } else {
@@ -341,7 +352,6 @@ const AdminDashboard = () => {
           `${import.meta.env.VITE_APP}/api/faculty/register`,
           formFaculty
         );
-
         if (res.data.success) {
           toast.success("Faculty added successfully!");
           setFormFaculty({
@@ -370,27 +380,61 @@ const AdminDashboard = () => {
     }
   };
 
-  // Delete
+  const handleEditFaculty = async (faculty) => {
+    setEditingFaculty(faculty);
+    setFormFaculty({
+      name: faculty.name,
+      email: faculty.email,
+      department: faculty.department,
+      phone: faculty.phone,
+      isAdmin: faculty.isAdmin,
+      subjects: faculty.subjects || [""],
+      session: faculty.session,
+      semester: faculty.semester,
+    });
+    scrollToForm();
+  };
+
+  const handleUpdateFacultyPassword = async () => {
+    if (!facultyNewPassword.trim()) {
+      toast.error("Password cannot be empty");
+      return;
+    }
+    try {
+      const res = await axios.put(
+        `${import.meta.env.VITE_APP}/api/faculty/admin/password/${editingFaculty.id}`,
+        { password: facultyNewPassword }
+      );
+      if (res.data.success) {
+        toast.success("Password updated successfully");
+        setFacultyPasswordModal(false);
+        setFacultyNewPassword("");
+        setFacultyOldPassword("");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Error updating password");
+    }
+  };
+
   const handleDeleteFaculty = async (id) => {
     if (!window.confirm("Are you sure you want to delete this faculty?")) return;
-
     try {
       const res = await axios.delete(
         `${import.meta.env.VITE_APP}/api/faculty/delete/${id}`
       );
-
       if (res.data.success) {
         toast.success("Faculty deleted!");
-        setSelectedFaculty(null);
+        setEditingFaculty(null);
         setViewFaculty(null);
         fetchFaculties();
       }
     } catch (err) {
       console.error(err);
+      toast.error("Error deleting faculty");
     }
   };
 
-  // CSV Upload
   const handleCSVFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -437,69 +481,13 @@ const AdminDashboard = () => {
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  // --------------------------------------------------------------------------------
-  //                         VIEW FACULTY DETAILS MODAL
-  // --------------------------------------------------------------------------------
-  const FacultyDetailsModal = () =>
-    viewFaculty ? (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999]">
-        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
-          <h2 className="text-xl font-bold mb-3 text-gray-700">Faculty Details</h2>
+  // ==================== MODALS ====================
 
-          <p><strong>Name:</strong> {viewFaculty.name}</p>
-          <p><strong>Email:</strong> {viewFaculty.email}</p>
-          <p><strong>Phone:</strong> {viewFaculty.phone}</p>
-          <p><strong>Department:</strong> {viewFaculty.department}</p>
-          <p><strong>Session:</strong> {viewFaculty.session}</p>
-          <p><strong>Semester:</strong> {viewFaculty.semester}</p>
-          <p><strong>Subjects:</strong> {viewFaculty.subjects.join(", ")}</p>
-
-          <div className="mt-5 flex justify-between">
-            <button
-              className="px-4 py-2 bg-blue-600 text-white rounded-md"
-              onClick={() => {
-                setSelectedFaculty(viewFaculty);
-                setFormFaculty({
-                  name: viewFaculty.name,
-                  email: viewFaculty.email,
-                  department: viewFaculty.department,
-                  phone: viewFaculty.phone,
-                  isAdmin: viewFaculty.isAdmin,
-                  subjects: viewFaculty.subjects.length ? viewFaculty.subjects : [""],
-                  session: viewFaculty.session,
-                  semester: viewFaculty.semester,
-                });
-
-                setViewFaculty(null);
-                scrollToForm(); // SCROLL ON UPDATE
-              }}
-            >
-              Update
-            </button>
-
-            <button
-              className="px-4 py-2 bg-red-600 text-white rounded-md"
-              onClick={() => handleDeleteFaculty(viewFaculty.id)}
-            >
-              Delete
-            </button>
-
-            <button
-              className="px-4 py-2 bg-gray-500 text-white rounded-md"
-              onClick={() => setViewFaculty(null)}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
-
-  // ========== STUDENT DETAILS MODAL ==========
+  // Student Details Modal
   const StudentDetailsModal = () =>
-    selectedStudent ? (
+    showStudentDetails && selectedStudent ? (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999]">
-        <div className="bg-white p-6 rounded-md shadow-xl w-[500px]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[500px] max-h-[90vh] overflow-y-auto">
           <h2 className="text-xl font-bold mb-4 text-gray-700">Student Details & Edit</h2>
 
           <form onSubmit={handleUpdateStudent} className="space-y-3">
@@ -545,15 +533,21 @@ const AdminDashboard = () => {
 
             <div>
               <label className="block text-sm font-semibold mb-1">Department</label>
-              <input
-                type="text"
+              <select
                 value={formStudent.department}
-                readOnly
-                className="w-full border p-2 rounded-md bg-gray-100"
-              />
+                onChange={(e) => setFormStudent({ ...formStudent, department: e.target.value })}
+                className="w-full border p-2 rounded-md"
+              >
+                <option value="">-- Select Department --</option>
+                {allDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="mt-5 flex gap-3">
+            <div className="mt-5 flex gap-3 flex-wrap">
               <button
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded-md flex-1"
@@ -564,7 +558,7 @@ const AdminDashboard = () => {
               <button
                 type="button"
                 onClick={() => setStudentPasswordModal(true)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-md"
+                className="px-4 py-2 bg-purple-600 text-white rounded-md flex-1"
               >
                 Change Password
               </button>
@@ -572,15 +566,18 @@ const AdminDashboard = () => {
               <button
                 type="button"
                 onClick={() => handleDeleteStudent(selectedStudent.id)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md"
+                className="px-4 py-2 bg-red-600 text-white rounded-md flex-1"
               >
                 Delete
               </button>
 
               <button
                 type="button"
-                onClick={() => setSelectedStudent(null)}
-                className="px-4 py-2 bg-gray-500 text-white rounded-md"
+                onClick={() => {
+                  setSelectedStudent(null);
+                  setShowStudentDetails(false);
+                }}
+                className="px-4 py-2 bg-gray-500 text-white rounded-md flex-1"
               >
                 Close
               </button>
@@ -590,205 +587,22 @@ const AdminDashboard = () => {
       </div>
     ) : null;
 
-  // ========== FACULTY EDIT MODAL ==========
-  const FacultyEditModal = () =>
-    editingFaculty ? (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999] overflow-y-auto">
-        <div className="bg-white p-6 rounded-md shadow-xl w-[550px] my-8">
-          <h2 className="text-xl font-bold mb-4 text-gray-700">Edit Faculty</h2>
-
-          <form onSubmit={handleSaveFacultyEdit} className="space-y-3">
-            <div>
-              <label className="block text-sm font-semibold mb-1">Name</label>
-              <input
-                type="text"
-                value={formFaculty.name}
-                onChange={(e) => setFormFaculty({ ...formFaculty, name: e.target.value })}
-                className="w-full border p-2 rounded-md"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Email</label>
-              <input
-                type="email"
-                value={formFaculty.email}
-                onChange={(e) => setFormFaculty({ ...formFaculty, email: e.target.value })}
-                className="w-full border p-2 rounded-md"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Phone</label>
-              <input
-                type="text"
-                value={formFaculty.phone}
-                onChange={(e) => setFormFaculty({ ...formFaculty, phone: e.target.value })}
-                className="w-full border p-2 rounded-md"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Department</label>
-              <input
-                type="text"
-                value={formFaculty.department}
-                readOnly
-                className="w-full border p-2 rounded-md bg-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Session</label>
-              <input
-                type="text"
-                value={formFaculty.session}
-                onChange={(e) => setFormFaculty({ ...formFaculty, session: e.target.value })}
-                className="w-full border p-2 rounded-md"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold mb-1">Semester</label>
-              <select
-                value={formFaculty.semester}
-                onChange={(e) => setFormFaculty({ ...formFaculty, semester: e.target.value })}
-                className="w-full border p-2 rounded-md"
-                required
-              >
-                <option value="">Select</option>
-                <option value="even">Even</option>
-                <option value="odd">Odd</option>
-              </select>
-            </div>
-
-            <div className="mt-5 flex gap-3">
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md"
-              >
-                Save Changes
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFacultyPasswordModal(true)}
-                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-md"
-              >
-                Change Password
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleDeleteFacultyClick(editingFaculty.id)}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md"
-              >
-                Delete
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEditingFaculty(null)}
-                className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
-              >
-                Close
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    ) : null;
-
-  // ========== FACULTY PASSWORD CHANGE MODAL ==========
-  const FacultyPasswordModal = () =>
-    facultyPasswordModal && editingFaculty ? (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001]">
-        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
-          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Password</h2>
-          <p className="mb-4 text-gray-600">Faculty: <strong>{editingFaculty.name}</strong></p>
-
-          <div className="mb-4">
-            <label className="block text-sm font-semibold mb-2">Current Password (for reference)</label>
-            <div className="relative">
-              <input
-                type={showOldPassword ? "text" : "password"}
-                placeholder="Current password (read-only)"
-                value={facultyOldPassword}
-                readOnly
-                className="w-full border p-2 rounded-md bg-gray-100 pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowOldPassword(!showOldPassword)}
-                className="absolute right-2 top-2 text-gray-600"
-              >
-                {showOldPassword ? "👁️" : "👁️‍🗨️"}
-              </button>
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-semibold mb-2">New Password</label>
-            <div className="relative">
-              <input
-                type={showNewPassword ? "text" : "password"}
-                placeholder="Enter new password"
-                value={facultyNewPassword}
-                onChange={(e) => setFacultyNewPassword(e.target.value)}
-                className="w-full border p-2 rounded-md pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-2 top-2 text-gray-600"
-              >
-                {showNewPassword ? "👁️" : "👁️‍🗨️"}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleUpdateFacultyPassword}
-              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md"
-            >
-              Update Password
-            </button>
-
-            <button
-              onClick={() => {
-                setFacultyPasswordModal(false);
-                setFacultyNewPassword("");
-                setFacultyOldPassword("");
-              }}
-              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    ) : null;
-
-  // ========== STUDENT PASSWORD CHANGE MODAL ==========
+  // Student Password Modal
   const StudentPasswordModal = () =>
     studentPasswordModal && selectedStudent ? (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
         <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
-          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Password</h2>
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Student Password</h2>
           <p className="mb-4 text-gray-600">Student: <strong>{selectedStudent.name}</strong></p>
+          <p className="mb-4 text-gray-600">Student ID: <strong>{selectedStudent.studentId}</strong></p>
 
-          <div className="mb-4">
-            <label className="block text-sm font-semibold mb-2">Current Password (for reference)</label>
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+            <label className="block text-sm font-semibold mb-2 text-gray-700">Current Password (to share with student)</label>
             <div className="relative">
               <input
                 type={showOldPass ? "text" : "password"}
-                placeholder="Current password (read-only)"
-                value={oldPassword}
+                placeholder="Current password"
+                value={selectedStudent.studentId || ""}
                 readOnly
                 className="w-full border p-2 rounded-md bg-gray-100 pr-10"
               />
@@ -800,6 +614,7 @@ const AdminDashboard = () => {
                 {showOldPass ? "👁️" : "👁️‍🗨️"}
               </button>
             </div>
+            <p className="text-xs text-yellow-700 mt-2">Note: Default password is usually the Student ID. Share this with the student.</p>
           </div>
 
           <div className="mb-4">
@@ -824,7 +639,7 @@ const AdminDashboard = () => {
 
           <div className="flex gap-3">
             <button
-              onClick={handleUpdatePassword}
+              onClick={handleUpdateStudentPassword}
               className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md"
             >
               Update Password
@@ -834,7 +649,6 @@ const AdminDashboard = () => {
               onClick={() => {
                 setStudentPasswordModal(false);
                 setNewPassword("");
-                setOldPassword("");
               }}
               className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
             >
@@ -845,312 +659,353 @@ const AdminDashboard = () => {
       </div>
     ) : null;
 
-  // --------------------------------------------------------------------------------
+  // Faculty Details Modal
+  const FacultyDetailsModal = () =>
+    viewFaculty ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[999]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
+          <h2 className="text-xl font-bold mb-3 text-gray-700">Faculty Details</h2>
 
+          <p><strong>Name:</strong> {viewFaculty.name}</p>
+          <p><strong>Email:</strong> {viewFaculty.email}</p>
+          <p><strong>Phone:</strong> {viewFaculty.phone}</p>
+          <p><strong>Department:</strong> {viewFaculty.department}</p>
+          <p><strong>Session:</strong> {viewFaculty.session}</p>
+          <p><strong>Semester:</strong> {viewFaculty.semester}</p>
+          <p><strong>Subjects:</strong> {viewFaculty.subjects && Array.isArray(viewFaculty.subjects) ? viewFaculty.subjects.join(", ") : "N/A"}</p>
+
+          <div className="mt-5 flex justify-between gap-2 flex-wrap">
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded-md flex-1"
+              onClick={() => {
+                handleEditFaculty(viewFaculty);
+                setViewFaculty(null);
+              }}
+            >
+              Edit
+            </button>
+
+            <button
+              className="px-4 py-2 bg-red-600 text-white rounded-md flex-1"
+              onClick={() => {
+                handleDeleteFaculty(viewFaculty.id);
+                setViewFaculty(null);
+              }}
+            >
+              Delete
+            </button>
+
+            <button
+              className="px-4 py-2 bg-gray-500 text-white rounded-md flex-1"
+              onClick={() => setViewFaculty(null)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  // Faculty Password Modal
+  const FacultyPasswordModal = () =>
+    facultyPasswordModal && editingFaculty ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[450px]">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Change Faculty Password</h2>
+          <p className="mb-4 text-gray-600">Faculty: <strong>{editingFaculty.name}</strong></p>
+          <p className="mb-4 text-gray-600">Email: <strong>{editingFaculty.email}</strong></p>
+
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+            <label className="block text-sm font-semibold mb-2 text-gray-700">Current Password (to share with faculty)</label>
+            <div className="relative">
+              <input
+                type={showOldPasswordFaculty ? "text" : "password"}
+                placeholder="Current password"
+                value={editingFaculty.phone || ""}
+                readOnly
+                className="w-full border p-2 rounded-md bg-gray-100 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowOldPasswordFaculty(!showOldPasswordFaculty)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showOldPasswordFaculty ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+            <p className="text-xs text-yellow-700 mt-2">Note: Default password is usually the Phone number. Share this with the faculty member.</p>
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-semibold mb-2">New Password</label>
+            <div className="relative">
+              <input
+                type={showNewPasswordFaculty ? "text" : "password"}
+                placeholder="Enter new password"
+                value={facultyNewPassword}
+                onChange={(e) => setFacultyNewPassword(e.target.value)}
+                className="w-full border p-2 rounded-md pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPasswordFaculty(!showNewPasswordFaculty)}
+                className="absolute right-2 top-2 text-gray-600"
+              >
+                {showNewPasswordFaculty ? "👁️" : "👁️‍🗨️"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleUpdateFacultyPassword}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md"
+            >
+              Update Password
+            </button>
+
+            <button
+              onClick={() => {
+                setFacultyPasswordModal(false);
+                setFacultyNewPassword("");
+              }}
+              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  // ==================== PROMOTE STUDENTS MODAL ====================
+  const PromoteStudentsModal = () =>
+    promoteModal ? (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1002]">
+        <div className="bg-white p-6 rounded-md shadow-xl w-[550px] max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold mb-4 text-gray-700">Promote Students to Next Year</h2>
+
+          <div className="space-y-4">
+            {/* Current Year Selection */}
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">Select Current Year</label>
+              <div className="flex gap-2 flex-wrap">
+                {[1, 2, 3].map((year) => (
+                  <button
+                    key={year}
+                    onClick={() => setPromoteYear(year)}
+                    className={`px-4 py-2 rounded-md font-semibold transition ${
+                      promoteYear === year
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    Year {year}
+                  </button>
+                ))}
+              </div>
+              {promoteYear && (
+                <p className="text-sm text-blue-600 mt-2">Will promote to Year {promoteYear + 1}</p>
+              )}
+            </div>
+
+            {/* Department Selection */}
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">Select Department</label>
+              <select
+                value={promoteDepartment}
+                onChange={(e) => setPromoteDepartment(e.target.value)}
+                className="w-full border p-2 rounded-md"
+              >
+                <option value="">-- Choose Department --</option>
+                {allDepartments.map((dept) => (
+                  <option key={dept} value={dept}>
+                    {dept}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Skip Student IDs */}
+            <div>
+              <label className="block text-sm font-semibold mb-2 text-gray-700">
+                Skip Student IDs (comma-separated)
+              </label>
+              <textarea
+                value={skipStudentIds}
+                onChange={(e) => setSkipStudentIds(e.target.value)}
+                placeholder="E.g., STU001, STU002, STU003"
+                className="w-full border p-2 rounded-md h-24"
+              />
+              <p className="text-xs text-gray-600 mt-1">Leave empty to promote all students of this year and department</p>
+            </div>
+
+            {/* Summary */}
+            {promoteYear && promoteDepartment && (
+              <div className="bg-blue-50 border border-blue-200 p-3 rounded-md">
+                <p className="text-sm text-blue-700">
+                  <strong>Summary:</strong> Promoting Year {promoteYear} students from <strong>{promoteDepartment}</strong> department to Year {promoteYear + 1}
+                  {skipStudentIds && ` (excluding ${skipStudentIds.split(",").length} student(s))`}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              onClick={handlePromoteStudents}
+              disabled={!promoteYear || !promoteDepartment || isPromoting}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isPromoting ? "Promoting..." : "Promote Students"}
+            </button>
+
+            <button
+              onClick={() => {
+                setPromoteModal(false);
+                setPromoteYear(null);
+                setPromoteDepartment("");
+                setSkipStudentIds("");
+              }}
+              disabled={isPromoting}
+              className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-md disabled:opacity-60"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null;
   return (
     <div className="flex min-h-screen bg-[#f5f6fa] font-sans">
       <div className="flex-grow transition-all duration-300">
         <Navbar userName={adminName || "Admin Dashboard"} onProfileClick={toggleSidebar} />
         <Toaster />
 
-        {FacultyDetailsModal()}
-        {FacultyEditModal()}
-        {FacultyPasswordModal()}
         {StudentDetailsModal()}
         {StudentPasswordModal()}
+        {FacultyDetailsModal()}
+        {FacultyPasswordModal()}
+        {PromoteStudentsModal()}
 
         <main className="p-8 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6 text-[#1d285d]">Faculty Management</h1>
+          <h1 className="text-3xl font-bold mb-6 text-[#1d285d]">Admin Dashboard</h1>
 
-          {/* Search */}
-          <div className="flex gap-4 mb-6">
-            <input
-              type="text"
-              placeholder="Search by name/email"
-              className="border p-2 rounded-md w-full max-w-md"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-
-            <input
-              type="text"
-              placeholder="Filter by session"
-              className="border p-2 rounded-md w-full max-w-xs"
-              value={sessionFilter}
-              onChange={(e) => setSessionFilter(e.target.value)}
-            />
+          {/* TABS */}
+          <div className="flex gap-4 mb-6 border-b">
+            <button
+              onClick={() => setActiveTab("students")}
+              className={`px-6 py-3 font-semibold transition ${
+                activeTab === "students"
+                  ? "border-b-4 border-blue-600 text-blue-600"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Student Management
+            </button>
+            <button
+              onClick={() => setActiveTab("faculty")}
+              className={`px-6 py-3 font-semibold transition ${
+                activeTab === "faculty"
+                  ? "border-b-4 border-blue-600 text-blue-600"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              Faculty Management
+            </button>
           </div>
 
-          {/* Toggle faculty table */}
-          <button
-            onClick={() => setShowFacultyDetails((prev) => !prev)}
-            className="mb-6 px-5 py-2 bg-[#243278] text-white rounded-md"
-          >
-            {showFacultyDetails ? "Hide Faculty Details" : "Show Faculty Details"}
-          </button>
-
-          {/* Faculty Table */}
-          {showFacultyDetails && (
-            <div className="overflow-x-auto bg-white border rounded shadow">
-              <table className="min-w-full">
-                <thead className="bg-[#243278] text-white text-left text-sm">
-                  <tr>
-                    <th className="px-6 py-3">Sr No</th>
-                    <th className="px-6 py-3">Faculty ID</th>
-                    <th className="px-6 py-3">Name</th>
-                    <th className="px-6 py-3">Department</th>
-                    <th className="px-6 py-3">Email</th>
-                    <th className="px-6 py-3">Phone</th>
-                    <th className="px-6 py-3">Session</th>
-                    <th className="px-6 py-3">Semester</th>
-                    <th className="px-6 py-3">Subjects</th>
-                    <th className="px-6 py-3">Actions</th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y text-sm">
-                  {(searchTerm || sessionFilter ? filteredFaculties : faculties).map(
-                    (faculty, index) => (
-                      <tr key={faculty.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-3">{index + 1}</td>
-
-                        <td className="px-6 py-3">
-                          {faculty.id.slice(0, 10)}...
-                        </td>
-
-                        <td className="px-6 py-3 font-semibold">
-                          {faculty.name}
-                        </td>
-
-                        <td className="px-6 py-3">
-                          {faculty.department}
-                        </td>
-
-                        <td className="px-6 py-3">{faculty.email}</td>
-
-                        <td className="px-6 py-3">{faculty.phone}</td>
-
-                        <td className="px-6 py-3">{faculty.session}</td>
-
-                        <td className="px-6 py-3">{faculty.semester}</td>
-
-                        <td className="px-6 py-3">
-                          {faculty.subjects.join(", ")}
-                        </td>
-
-                        <td className="px-6 py-3">
-                          <button
-                            onClick={() => handleEditFaculty(faculty)}
-                            className="text-blue-600 hover:underline me-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setViewFaculty(faculty)}
-                            className="text-green-600 hover:underline"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  )}
-
-                  {(searchTerm || sessionFilter ? filteredFaculties : faculties)
-                    .length === 0 && (
-                    <tr>
-                      <td colSpan="10" className="text-center py-4 text-gray-500">
-                        No faculty found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Add/Edit Form */}
-          <div
-            ref={formScrollRef}  // <-- Scroll Target
-            className="mt-6 bg-white p-6 shadow-md rounded-md"
-          >
-            <h2 className="text-xl font-semibold mb-4">
-              {selectedFaculty ? "Edit Faculty" : "Add New Faculty"}
-            </h2>
-
-            <form
-              ref={formRef}
-              onSubmit={handleAddOrUpdateFaculty}
-              className="grid grid-cols-2 gap-4"
-            >
-              <input
-                name="name"
-                placeholder="Name"
-                value={formFaculty.name}
-                onChange={handleChange}
-                required
-                className="border p-2 rounded-md"
-              />
-
-              <input
-                name="email"
-                type="email"
-                placeholder="Email"
-                value={formFaculty.email}
-                onChange={handleChange}
-                required
-                className="border p-2 rounded-md"
-              />
-
-              <input
-                name="department"
-                value={formFaculty.department}
-                readOnly
-                placeholder="Department"
-                className="border p-2 rounded-md bg-gray-100"
-              />
-
-              <input
-                name="phone"
-                placeholder="Phone"
-                value={formFaculty.phone}
-                onChange={handleChange}
-                required
-                className="border p-2 rounded-md"
-              />
-
-              <input
-                name="session"
-                placeholder="Session (e.g., 2025-26)"
-                value={formFaculty.session}
-                onChange={handleChange}
-                required
-                className="border p-2 rounded-md"
-              />
-
-              <div>
-                <select
-                  name="semester"
-                  placeholder="Select Semester"
-                  value={formFaculty.semester}
-                  onChange={handleChange}
-                  required
-                  className="border p-2 rounded-md w-full"
-                >
-                  <option value="">Select Semester</option>
-                  <option value="even">Even Semester</option>
-                  <option value="odd">Odd Semester</option>
-                </select>
-                <p style={{ fontSize: "11px", color: "#666", marginTop: "4px" }}>
-                  Even: 2, 4, 6, 8 semesters | Odd: 1, 3, 5, 7 semesters
-                </p>
-              </div>
-
-              {/* Subjects */}
-              <div className="col-span-2">
-                <label className="font-semibold">Subjects</label>
-
-                {formFaculty.subjects.map((subj, idx) => (
-                  <input
-                    key={idx}
-                    value={subj}
-                    onChange={(e) => handleSubjectChange(idx, e.target.value)}
-                    placeholder={`Subject ${idx + 1}`}
-                    className="border p-2 rounded-md w-full mb-2"
-                  />
-                ))}
-
-                <button
-                  type="button"
-                  onClick={addSubjectField}
-                  className="px-3 py-1 border border-blue-600 text-blue-600 rounded-md"
-                >
-                  Add Subject
-                </button>
-              </div>
-
-              {/* Buttons */}
-              <div className="col-span-2 flex gap-4">
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-blue-600 text-white rounded-md"
-                >
-                  {selectedFaculty ? "Update Faculty" : "Add Faculty"}
-                </button>
-
-                {selectedFaculty && (
+          {/* ==================== STUDENT MANAGEMENT TAB ==================== */}
+          {activeTab === "students" && (
+            <div>
+              {/* Year Filter Buttons */}
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold mb-3 text-gray-700">Filter by Year</h2>
+                <div className="flex gap-3 flex-wrap items-center">
+                  {[1, 2, 3, 4].map((year) => (
+                    <button
+                      key={year}
+                      onClick={() => handleYearClick(year)}
+                      className={`px-6 py-2 rounded-md font-semibold transition ${
+                        selectedYear === year
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      {year} Year
+                    </button>
+                  ))}
                   <button
-                    type="button"
-                    className="px-5 py-2 bg-red-600 text-white rounded-md"
-                    onClick={() => handleDeleteFaculty(selectedFaculty.id)}
+                    onClick={() => setPromoteModal(true)}
+                    className="px-6 py-2 rounded-md font-semibold bg-green-600 text-white hover:bg-green-700 transition"
                   >
-                    Delete
+                    Promote to Next Year
                   </button>
+                </div>
+                {selectedYear && (
+                  <p className="mt-3 text-sm text-gray-600">
+                    Showing: {selectedYear} Year | Total Students: {filteredStudents.length}
+                  </p>
                 )}
               </div>
-            </form>
-          </div>
 
-          {/* ============ STUDENT MANAGEMENT ============ */}
-          <div className="mt-10">
-            <h2 className="text-2xl font-bold mb-4 text-[#1d285d]">Student Management</h2>
+              {/* Department Filter */}
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold mb-3 text-gray-700">Filter by Department</h2>
+                <select
+                  value={selectedStudentDept}
+                  onChange={(e) => setSelectedStudentDept(e.target.value)}
+                  className="border p-3 rounded-md w-full max-w-md"
+                >
+                  <option value="">-- All Departments --</option>
+                  {allDepartments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Search Students */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search students by name/ID/email"
-                className="border p-2 rounded-md w-full"
-                value={searchStudentTerm}
-                onChange={(e) => setSearchStudentTerm(e.target.value)}
-              />
-            </div>
+              {/* Search */}
+              <div className="mb-6">
+                <input
+                  type="text"
+                  placeholder="Search by name/ID/email"
+                  className="border p-3 rounded-md w-full max-w-md"
+                  value={searchStudentTerm}
+                  onChange={(e) => setSearchStudentTerm(e.target.value)}
+                />
+              </div>
 
-            {/* Toggle Student Table */}
-            <button
-              onClick={() => setShowStudentDetails((prev) => !prev)}
-              className="mb-6 px-5 py-2 bg-[#243278] text-white rounded-md"
-            >
-              {showStudentDetails ? "Hide Student List" : "Show Student List"}
-            </button>
-
-            {/* Student Table */}
-            {showStudentDetails && (
-              <div className="overflow-x-auto bg-white border rounded shadow mb-8">
+              {/* Students Table */}
+              <div className="overflow-x-auto bg-white border rounded shadow">
                 <table className="min-w-full">
                   <thead className="bg-[#243278] text-white text-left text-sm">
                     <tr>
                       <th className="px-6 py-3">Sr No</th>
-                      <th className="px-6 py-3">Student ID</th>
                       <th className="px-6 py-3">Name</th>
+                      <th className="px-6 py-3">Student ID</th>
                       <th className="px-6 py-3">Email</th>
                       <th className="px-6 py-3">Phone</th>
                       <th className="px-6 py-3">Year</th>
+                      <th className="px-6 py-3">Department</th>
                       <th className="px-6 py-3">Actions</th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y text-sm">
-                    {(searchStudentTerm ? filteredStudents : students).map((student, index) => (
+                    {filteredStudents.map((student, index) => (
                       <tr key={student.id} className="hover:bg-gray-50">
                         <td className="px-6 py-3">{index + 1}</td>
-                        <td className="px-6 py-3 font-mono text-xs">{student.studentId}</td>
                         <td className="px-6 py-3 font-semibold">{student.name}</td>
+                        <td className="px-6 py-3">{student.studentId}</td>
                         <td className="px-6 py-3">{student.email}</td>
                         <td className="px-6 py-3">{student.phone}</td>
-                        <td className="px-6 py-3">{student.year || "-"}</td>
+                        <td className="px-6 py-3">{student.year}</td>
+                        <td className="px-6 py-3">{student.department}</td>
                         <td className="px-6 py-3">
                           <button
-                            onClick={() => {
-                              setSelectedStudent(student);
-                              setFormStudent({
-                                name: student.name,
-                                email: student.email,
-                                phone: student.phone,
-                                year: student.year || "",
-                                department: student.department,
-                              });
-                            }}
+                            onClick={() => handleEditStudent(student)}
                             className="text-blue-600 hover:underline"
                           >
                             Edit
@@ -1159,9 +1014,9 @@ const AdminDashboard = () => {
                       </tr>
                     ))}
 
-                    {(searchStudentTerm ? filteredStudents : students).length === 0 && (
+                    {filteredStudents.length === 0 && (
                       <tr>
-                        <td colSpan="7" className="text-center py-4 text-gray-500">
+                        <td colSpan="8" className="text-center py-4 text-gray-500">
                           No students found.
                         </td>
                       </tr>
@@ -1169,27 +1024,284 @@ const AdminDashboard = () => {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}          {/* ==================== FACULTY MANAGEMENT TAB ==================== */}
+          {activeTab === "faculty" && (
+            <div>
+              {/* Search & Filter */}
+              <div className="flex gap-4 mb-6 flex-wrap">
+                <input
+                  type="text"
+                  placeholder="Search by name/email"
+                  className="border p-2 rounded-md w-full max-w-md"
+                  value={searchFacultyTerm}
+                  onChange={(e) => setSearchFacultyTerm(e.target.value)}
+                />
 
-          {/* CSV Upload */}
-          <div className="mt-10 bg-white p-6 rounded-md shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Upload CSV</h2>
+                <input
+                  type="text"
+                  placeholder="Filter by session"
+                  className="border p-2 rounded-md w-full max-w-xs"
+                  value={sessionFilter}
+                  onChange={(e) => setSessionFilter(e.target.value)}
+                />
 
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleCSVFile}
-              className="mb-3"
-            />
+                <select
+                  value={selectedFacultyDept}
+                  onChange={(e) => setSelectedFacultyDept(e.target.value)}
+                  className="border p-2 rounded-md w-full max-w-md"
+                >
+                  <option value="">-- All Departments --</option>
+                  {allDepartments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <button
-              onClick={handleCSVSubmit}
-              className="px-5 py-2 bg-green-600 text-white rounded-md"
-            >
-              Upload CSV
-            </button>
-          </div>
+              {/* Fetch Faculty Button */}
+              <div className="flex gap-4 mb-6">
+                <button
+                  onClick={fetchFaculties}
+                  className="px-5 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                >
+                  Fetch Faculty Details
+                </button>
+              </div>
+
+              {/* Faculty Table */}
+              <div className="overflow-x-auto bg-white border rounded shadow mb-8">
+                <table className="min-w-full">
+                  <thead className="bg-[#243278] text-white text-left text-sm">
+                    <tr>
+                      <th className="px-6 py-3">Sr No</th>
+                      <th className="px-6 py-3">Name</th>
+                      <th className="px-6 py-3">Department</th>
+                      <th className="px-6 py-3">Email</th>
+                      <th className="px-6 py-3">Phone</th>
+                      <th className="px-6 py-3">Session</th>
+                      <th className="px-6 py-3">Semester</th>
+                      <th className="px-6 py-3">Subjects</th>
+                      <th className="px-6 py-3">Actions</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y text-sm">
+                    {(searchFacultyTerm || sessionFilter ? filteredFaculties : faculties).map(
+                      (faculty, index) => (
+                        <tr key={faculty.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-3">{index + 1}</td>
+                          <td className="px-6 py-3 font-semibold">{faculty.name}</td>
+                          <td className="px-6 py-3">{faculty.department}</td>
+                          <td className="px-6 py-3">{faculty.email}</td>
+                          <td className="px-6 py-3">{faculty.phone}</td>
+                          <td className="px-6 py-3">{faculty.session}</td>
+                          <td className="px-6 py-3">{faculty.semester}</td>
+                          <td className="px-6 py-3">{faculty.subjects && Array.isArray(faculty.subjects) ? faculty.subjects.join(", ") : "N/A"}</td>
+                          <td className="px-6 py-3 flex gap-2">
+                            <button
+                              onClick={() => handleEditFaculty(faculty)}
+                              className="text-blue-600 hover:underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setViewFaculty(faculty)}
+                              className="text-green-600 hover:underline"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    )}
+
+                    {(searchFacultyTerm || sessionFilter ? filteredFaculties : faculties).length === 0 && (
+                      <tr>
+                        <td colSpan="9" className="text-center py-4 text-gray-500">
+                          No faculty found.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Add/Edit Faculty Form */}
+              <div ref={formScrollRef} className="bg-white p-6 shadow-md rounded-md mb-8">
+                <h2 className="text-xl font-semibold mb-4">
+                  {editingFaculty ? "Edit Faculty" : "Add New Faculty"}
+                </h2>
+
+                {editingFaculty && (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <p className="text-sm text-blue-700">
+                      <strong>Editing:</strong> {editingFaculty.name} ({editingFaculty.email})
+                    </p>
+                  </div>
+                )}
+
+                <form
+                  ref={formRef}
+                  onSubmit={handleAddOrUpdateFaculty}
+                  className="grid grid-cols-2 gap-4"
+                >
+                  <input
+                    name="name"
+                    placeholder="Name"
+                    value={formFaculty.name}
+                    onChange={handleChange}
+                    required
+                    className="border p-2 rounded-md"
+                  />
+
+                  <input
+                    name="email"
+                    type="email"
+                    placeholder="Email"
+                    value={formFaculty.email}
+                    onChange={handleChange}
+                    required
+                    className="border p-2 rounded-md"
+                  />
+
+                  <select
+                    name="department"
+                    value={formFaculty.department}
+                    onChange={handleChange}
+                    className="border p-2 rounded-md"
+                  >
+                    <option value="">-- Select Department --</option>
+                    <option value="IT">IT</option>
+                    <option value="CIVIL">CIVIL</option>
+                    <option value="DS">DS</option>
+                    <option value="Computer Science">Computer Science</option>
+                  </select>
+
+                  <input
+                    name="phone"
+                    placeholder="Phone"
+                    value={formFaculty.phone}
+                    onChange={handleChange}
+                    required
+                    className="border p-2 rounded-md"
+                  />
+
+                  <input
+                    name="session"
+                    placeholder="Session (e.g., 2025-26)"
+                    value={formFaculty.session}
+                    onChange={handleChange}
+                    required
+                    className="border p-2 rounded-md"
+                  />
+
+                  <div>
+                    <select
+                      name="semester"
+                      value={formFaculty.semester}
+                      onChange={handleChange}
+                      required
+                      className="border p-2 rounded-md w-full"
+                    >
+                      <option value="">Select Semester</option>
+                      <option value="even">Even</option>
+                      <option value="odd">Odd</option>
+                    </select>
+                  </div>
+
+                  {/* Subjects */}
+                  <div className="col-span-2">
+                    <label className="font-semibold block mb-2">Subjects</label>
+                    {formFaculty.subjects.map((subj, idx) => (
+                      <input
+                        key={idx}
+                        value={subj}
+                        onChange={(e) => handleSubjectChange(idx, e.target.value)}
+                        placeholder={`Subject ${idx + 1}`}
+                        className="border p-2 rounded-md w-full mb-2"
+                      />
+                    ))}
+                    <button
+                      type="button"
+                      onClick={addSubjectField}
+                      className="px-3 py-1 border border-blue-600 text-blue-600 rounded-md"
+                    >
+                      Add Subject
+                    </button>
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="col-span-2 flex gap-4 flex-wrap">
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    >
+                      {editingFaculty ? "Update Faculty" : "Add Faculty"}
+                    </button>
+
+                    {editingFaculty && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setFacultyPasswordModal(true)}
+                          className="px-5 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                        >
+                          Change Password
+                        </button>
+                        <button
+                          type="button"
+                          className="px-5 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+                          onClick={() => handleDeleteFaculty(editingFaculty.id)}
+                        >
+                          Delete Faculty
+                        </button>
+                        <button
+                          type="button"
+                          className="px-5 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+                          onClick={() => {
+                            setEditingFaculty(null);
+                            setFormFaculty({
+                              name: "",
+                              email: "",
+                              department: adminDept,
+                              phone: "",
+                              isAdmin: false,
+                              subjects: [""],
+                              session: "",
+                              semester: "",
+                            });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </form>
+              </div>
+
+              {/* CSV Upload */}
+              <div className="bg-white p-6 rounded-md shadow-md">
+                <h2 className="text-xl font-semibold mb-4">Upload Faculty CSV</h2>
+
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCSVFile}
+                  className="mb-3"
+                />
+
+                <button
+                  onClick={handleCSVSubmit}
+                  className="px-5 py-2 bg-green-600 text-white rounded-md"
+                >
+                  Upload CSV
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>
@@ -1197,5 +1309,3 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
-
-// --- FULL UPDATED CODE ENDS ---

@@ -66,7 +66,7 @@ const AddStudent = () => {
   };
 
 const handleAddStudent = async () => {
-  if (!addStudentId || !addName || !addYear || !addEmail) {
+  if (!addStudentId || !addName || !addYear || !addEmail || !addDepartment) {
     return toast.error("Fill all required fields");
   }
 
@@ -76,23 +76,48 @@ const handleAddStudent = async () => {
   {
     studentId: addStudentId,
     name: addName,
-    department: facultyDetails?.department,
+    department: addDepartment,
     year: addYear,
     email: addEmail,
     phone: addPhone,
   }
 );
 
-
-
     if (res.data.success) {
       toast.success("✅ Student added successfully!");
       setStudents([...(students || []), res.data.data]);
       clearAddForm();
-    } else toast.error("❌ " + res.data.message);
+    } else {
+      // ✅ Show specific field error messages
+      const errorField = res.data.errorField;
+      const msg = res.data.message;
+      
+      if (errorField === "email") {
+        toast.error("❌ Email already registered");
+      } else if (errorField === "phone") {
+        toast.error("❌ Phone number already registered");
+      } else if (errorField === "studentId") {
+        toast.error("❌ Student ID already exists");
+      } else {
+        toast.error("❌ " + msg);
+      }
+    }
   } catch (err) {
     console.error(err);
-    toast.error("❌ Something went wrong.");
+    // ✅ Handle error response with field-specific messages
+    const errorData = err.response?.data;
+    const errorField = errorData?.errorField;
+    const msg = errorData?.message || "Something went wrong";
+    
+    if (errorField === "email") {
+      toast.error("❌ Email already registered");
+    } else if (errorField === "phone") {
+      toast.error("❌ Phone number already registered");
+    } else if (errorField === "studentId") {
+      toast.error("❌ Student ID already exists");
+    } else {
+      toast.error("❌ " + msg);
+    }
   }
 };
 
@@ -121,7 +146,10 @@ const handleAddStudent = async () => {
   };
 
   const handleUpdateStudent = async () => {
-    if (!editingStudent) return alert("Fetch a student first");
+    if (!editingStudent) return toast.error("Fetch a student first");
+    if (!editName || !editEmail || !editYear || !editDepartment) {
+      return toast.error("Please fill all required fields");
+    }
     try {
   const res = await axios.put(
   `${import.meta.env.VITE_APP}/api/student/${editingStudent.id}`,
@@ -135,42 +163,77 @@ const handleAddStudent = async () => {
   }
 );
 
-
       if (res.data.success) {
          toast.success("✅ Student updated successfully!");
+        // Update the student in the list
         setStudents(
           (students || []).map((stu) =>
             stu.id === editingStudent.id ? res.data.data : stu
           )
         );
         clearEditForm();
-      } else  toast.error("❌ " + res.data.message);
+        // Refresh students if a year is selected
+        if (selectedYear) {
+          fetchStudentsByYear(selectedYear);
+        }
+      } else {
+        // ✅ Show specific field error messages
+        const errorField = res.data.errorField;
+        const msg = res.data.message;
+        
+        if (errorField === "email") {
+          toast.error("❌ Email already registered");
+        } else if (errorField === "phone") {
+          toast.error("❌ Phone number already registered");
+        } else if (errorField === "studentId") {
+          toast.error("❌ Student ID already exists");
+        } else {
+          toast.error("❌ " + msg);
+        }
+      }
     } catch (err) {
       console.error(err);
-     toast.error("❌ Something went wrong.");
+      // ✅ Handle error response with field-specific messages
+      const errorData = err.response?.data;
+      const errorField = errorData?.errorField;
+      const msg = errorData?.message || "Error updating student";
+      
+      if (errorField === "email") {
+        toast.error("❌ Email already registered");
+      } else if (errorField === "phone") {
+        toast.error("❌ Phone number already registered");
+      } else if (errorField === "studentId") {
+        toast.error("❌ Student ID already exists");
+      } else {
+        toast.error("❌ " + msg);
+      }
     }
   };
 
   const handleDeleteStudent = async () => {
-    if (!editingStudent) return alert("Fetch a student first");
+    if (!editingStudent) return toast.error("Fetch a student first");
     if (!window.confirm("Are you sure you want to delete this student?"))
       return;
     try {
    const res = await axios.delete(
-  `${import.meta.env.VITE_APP}/api/student/${editingStudent._id}`
+  `${import.meta.env.VITE_APP}/api/student/${editingStudent.id}`
 );
 
 
       if (res.data.success) {
-         toast.success("✅ Student deleted!");
+         toast.success("✅ Student deleted successfully!");
         setStudents(
           (students || []).filter((stu) => stu.id !== editingStudent.id)
         );
         clearEditForm();
+        // Refresh students if a year is selected
+        if (selectedYear) {
+          fetchStudentsByYear(selectedYear);
+        }
       }
     } catch (err) {
       console.error(err);
-      alert("❌ Something went wrong.");
+      toast.error("❌ Error deleting student. Please try again.");
     }
   };
 
@@ -181,23 +244,36 @@ const handleAddStudent = async () => {
       setStudents([]);
       return;
     }
-    try {
-  const res = await axios.get(
-  `${import.meta.env.VITE_APP}/api/student?year=${year}&department=${facultyDetails?.department}`
-);
+    
+    const department = facultyDetails?.department || "";
+    if (!department) {
+      toast.error("Department information not available");
+      return;
+    }
 
+    try {
+      // Show loading state
+      setStudents([]);
+      setSelectedYear(year);
+      
+      // Fetch students from backend based on year
+      const res = await axios.get(
+        `${import.meta.env.VITE_APP}/api/student?year=${year}&department=${department}`
+      );
 
       if (res.data.success) {
-        setStudents(res.data.data);
-        setSelectedYear(year);
+        const fetchedStudents = res.data.data || [];
+        setStudents(fetchedStudents);
+        toast.success(`Found ${fetchedStudents.length} student(s) for Year ${year}`);
       } else {
         setStudents([]);
-        setSelectedYear(year);
+        toast.error(res.data.message || "Failed to fetch students");
       }
     } catch (err) {
       console.error("Error fetching students:", err);
       setStudents([]);
-      setSelectedYear(year);
+      const errorMsg = err.response?.data?.message || "Error fetching students from backend";
+      toast.error(errorMsg);
     }
   };
 
@@ -281,17 +357,41 @@ useEffect(() => {
           </h2>
 
           {/* 🔹 Year Filter Buttons */}
-          <div className="flex gap-4 mb-6">
+          <div className="flex gap-4 mb-6 flex-wrap">
             {[1, 2, 3, 4].map((year) => (
               <button
                 key={year}
                 onClick={() => fetchStudentsByYear(year)}
-                className="bg-[#243278] text-white px-4 py-2 rounded-md shadow-md transform transition duration-200 hover:scale-105"
+                className={`px-6 py-3 rounded-lg font-semibold shadow-md transform transition duration-200 hover:scale-105 ${
+                  selectedYear === year
+                    ? "bg-[#243278] text-white ring-2 ring-blue-300"
+                    : "bg-white text-[#243278] border-2 border-[#243278] hover:bg-blue-50"
+                }`}
               >
-                {year} Year
+                {year === 1 ? "1st Year" : year === 2 ? "2nd Year" : year === 3 ? "3rd Year" : "4th Year"}
               </button>
             ))}
+            {selectedYear && (
+              <button
+                onClick={() => {
+                  setSelectedYear(null);
+                  setStudents([]);
+                }}
+                className="px-6 py-3 rounded-lg font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition duration-200"
+              >
+                Clear Filter
+              </button>
+            )}
           </div>
+          
+          {/* Status Message */}
+          {selectedYear && students.length > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 rounded-lg">
+              <p className="text-sm text-blue-700 font-medium">
+                Showing <strong>{students.length}</strong> student(s) for <strong>Year {selectedYear}</strong>
+              </p>
+            </div>
+          )}
 
           {/* 🔹 Student List or Details */}
           {!selectedStudent ? (
@@ -309,6 +409,7 @@ useEffect(() => {
                       <th className="p-2 border">Department</th>
                       <th className="p-2 border">Email</th>
                       <th className="p-2 border">Phone</th>
+                      <th className="p-2 border">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -316,8 +417,7 @@ useEffect(() => {
                       students.map((stu, index) => (
                         <tr
                           key={stu.id}
-                          onClick={() => handleStudentClick(stu)}
-                          className="hover:bg-gray-100 cursor-pointer"
+                          className="hover:bg-gray-100"
                         >
                           <td className="border p-2 text-center">
                             {index + 1}
@@ -327,11 +427,52 @@ useEffect(() => {
                           <td className="border p-2">{stu.department}</td>
                           <td className="border p-2">{stu.email}</td>
                           <td className="border p-2">{stu.phone}</td>
+                          <td className="border p-2">
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleStudentClick(stu)}
+                                className="text-blue-600 hover:underline text-sm"
+                              >
+                                View
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditStudentIdInput(stu.studentId);
+                                  // Auto-fetch when clicking edit
+                                  const fetchEdit = async () => {
+                                    try {
+                                      const res = await axios.get(
+                                        `${import.meta.env.VITE_APP}/api/student/id/${stu.studentId}`
+                                      );
+                                      if (res.data.success) {
+                                        const stuData = res.data.data;
+                                        setEditingStudent(stuData);
+                                        setEditStudentId(stuData.studentId);
+                                        setEditName(stuData.name);
+                                        setEditDepartment(stuData.department);
+                                        setEditYear(stuData.year);
+                                        setEditEmail(stuData.email);
+                                        setEditPhone(stuData.phone);
+                                      }
+                                    } catch (err) {
+                                      console.error(err);
+                                      toast.error("❌ Student not found");
+                                    }
+                                  };
+                                  fetchEdit();
+                                }}
+                                className="text-green-600 hover:underline text-sm"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="6" className="text-center p-3 border">
+                        <td colSpan="7" className="text-center p-3 border">
                           No students found for {selectedYear} Year
                         </td>
                       </tr>
@@ -449,13 +590,17 @@ useEffect(() => {
                     onChange={(e) => setAddName(e.target.value)}
                     className="border p-2 rounded-md w-full"
                   />
-                 <input
-  type="text"
-  placeholder="Department"
-  value={facultyDetails?.department || ""}
-  disabled
-  className="border p-2 rounded-md w-full bg-gray-100"
-/>
+                  <select
+                    value={addDepartment}
+                    onChange={(e) => setAddDepartment(e.target.value)}
+                    className="border p-2 rounded-md w-full"
+                  >
+                    <option value="">-- Select Department --</option>
+                    <option value="IT">IT</option>
+                    <option value="CIVIL">CIVIL</option>
+                    <option value="DS">DS</option>
+                    <option value="Computer Science">Computer Science</option>
+                  </select>
 
                   <select
                     value={addYear}
@@ -553,13 +698,17 @@ useEffect(() => {
                       onChange={(e) => setEditName(e.target.value)}
                       className="border p-2 rounded-md w-full"
                     />
-                   <input
-  type="text"
-  placeholder="Department"
-  value={facultyDetails?.department || ""}
-  disabled
-  className="border p-2 rounded-md w-full bg-gray-100"
-/>
+                    <select
+                      value={editDepartment}
+                      onChange={(e) => setEditDepartment(e.target.value)}
+                      className="border p-2 rounded-md w-full"
+                    >
+                      <option value="">-- Select Department --</option>
+                      <option value="IT">IT</option>
+                      <option value="CIVIL">CIVIL</option>
+                      <option value="DS">DS</option>
+                      <option value="Computer Science">Computer Science</option>
+                    </select>
 
                     <select
                       value={editYear}

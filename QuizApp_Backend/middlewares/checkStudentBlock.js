@@ -1,45 +1,32 @@
+// middlewares/checkStudentBlock.js
 import QuizConfig from "../models/QuizConfig.js";
 
-export const checkStudentBlock = async (req, res, next) => {
+const checkStudentBlock = async (req, res, next) => {
   const { quizId } = req.params;
-  const studentId = req.student?.id; // Sequelize primary key
-
-  if (!quizId || !studentId) return next();
+  const studentId = req.user?.id;
 
   try {
-    const quizConfig = await QuizConfig.findByPk(quizId, {
-      attributes: ["blocked"],
-    });
-
-    if (!quizConfig || !Array.isArray(quizConfig.blocked) || !quizConfig.blocked.length) {
-      return next();
-    }
+    const quizConfig = await QuizConfig.findByPk(quizId);
+    if (!quizConfig) return res.status(404).json({ success: false, message: "Quiz not found" });
 
     const now = new Date();
+    let blocked = Array.isArray(quizConfig.blocked) ? quizConfig.blocked : [];
+    blocked = blocked.filter(b => b.expiresAt && new Date(b.expiresAt) > now);
 
-    // ✅ Look for block using correct key
-    const blockEntry = quizConfig.blocked.find(
-      (b) => b.studentId === studentId
-    );
-
-    if (!blockEntry || new Date(blockEntry.expiresAt) <= now) {
-      return next(); // Not blocked or block expired
+    const existing = blocked.find(b => Number(b.student) === Number(studentId));
+    if (existing) {
+      const remainingSeconds = Math.ceil((new Date(existing.expiresAt) - now) / 1000);
+      return res.status(403).json({
+        success: false,
+        message: `You are blocked from this quiz. Try again in ${remainingSeconds}s.`,
+        remainingSeconds
+      });
     }
 
-    // Attach block info
-    req.blocked = true;
-    req.remainingBlockSeconds = Math.ceil(
-      (new Date(blockEntry.expiresAt) - now) / 1000
-    );
-
     next();
-  } catch (error) {
-    console.error("❌ Error checking student block:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      error: error.message,
-    });
+  } catch (err) {
+    console.error("[CHECK BLOCK ERROR]", err);
+    return res.status(500).json({ success: false, message: "Internal Server Error" });
   }
 };
 
