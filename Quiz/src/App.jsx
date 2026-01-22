@@ -25,6 +25,10 @@ import BlockedStudentPage from "./pages/faculty/BlockedStudentPage";
 import Template from "./pages/faculty/Template";
 import Createquiz2 from "./pages/faculty/Createquiz2";
 import BlockedWait from "./pages/student/BlockedWait";
+import AllStudents from "./pages/faculty/AllStudents";
+import UploadQuestions from "./pages/faculty/UploadQuestions";
+import MyQuizzes from "./pages/faculty/MyQuizzes";
+import FacultyManagement from "./pages/faculty/FacultyManagement";
 // Layout
 const DashboardLayout = ({ children }) => (
   <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -38,14 +42,14 @@ const App = () => {
     <AuthProvider>
       <Router>
         <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/home" element={<Home />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/admin-login" element={<Login />} />
           <Route path="/quiz/:quizId" element={<Quiz />} />
           <Route path="/blocked-wait/:quizId" element={<BlockedWait />} />
           <Route path="/student-login" element={<StudentLogin />} />
           <Route path="/student-quiz-result" element={<StStudentQuizResult />} />
           <Route path="/faculty-login" element={<Login />} />
-          <Route path="/create" element={<DashboardLayout><Createquiz2 /></DashboardLayout>} />
+          <Route path="/create" element={<Createquiz2 />} />
           <Route path="/template" element={<Template />} />
           <Route path="/seeresult" element={<Seeresult />} />
           <Route path="/result/:id" element={<HomePageStudent />} />
@@ -53,10 +57,12 @@ const App = () => {
           <Route path="*" element={<Error />} />
      
 
-          <Route path="/createquiz" element={<DashboardLayout><CreateQuiz /></DashboardLayout>} />
+          <Route path="/createquiz" element={<UploadQuestions />} />
           <Route path="/myquiz" element={<DashboardLayout><CreateMyQuizzes /></DashboardLayout>} />
-          <Route path="/studentdetails" element={<AddStudent/>}/>
-<Route path="/seeresult/:quizId" element={<StStudentQuizResult />} />
+          <Route path="/myquizzes" element={<MyQuizzes />} />
+          <Route path="/studentdetails" element={<AllStudents/>}/>
+          <Route path="/faculty-management" element={<FacultyManagement />} />
+          <Route path="/seeresult/:quizId" element={<StStudentQuizResult />} />
 
              <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />

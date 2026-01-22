@@ -64,37 +64,32 @@ Give me the output ONLY in CSV format.
   };
 
   return (
-    <div className="flex min-h-screen ">
+    <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
         
-      <div className="flex-1">
-        <div className="p-3 ">
-            <Navbar userName="Template Prompt Generator" />
-        </div>
-        <div className="flex-1 p-4 lg:p-4 flex justify-center items-start">
-          <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl p-4 lg:p-8">
-            <h1 className="text-xl lg:text-2xl font-bold text-gray-800 mb-4">
-              📄 Universal Quiz CSV Prompt
+      <div className="flex flex-col flex-1">
+        <Navbar userName="CSV Prompt Generator" />
+        <div className="flex-1 p-6 flex justify-center items-start">
+          <div className="w-full max-w-6xl bg-white rounded-lg shadow-lg p-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-4">
+              📄 CSV Generator Prompt
             </h1>
 
             <p className="text-gray-600 text-base mb-6">
-              Generates a <b>single downloadable CSV</b> for quiz upload.
-              Works for uploaded papers or RAW data generation.
+              Use this prompt with AI tools to generate quiz questions in CSV format.
             </p>
 
             <button
               onClick={handleCopy}
-              className={`w-60 mb-3 py-2 rounded-xl font-semibold text-lg text-white transition-all duration-300 
-                ${copied ? "bg-green-500 hover:bg-green-600" : "bg-gradient-to-r from-green-300 to-teal-700 hover:scale-105"}`}
+              className={`w-60 mb-4 py-3 rounded-lg font-semibold text-white transition-all duration-300 
+                ${copied ? "bg-green-600" : "bg-blue-600 hover:bg-blue-700"}`}
             >
-              {copied ? " Prompt Copied!" : " Copy Prompt"}
+              {copied ? "✓ Copied!" : "📋 Copy Prompt"}
             </button>
 
-            <pre className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-sm lg:text-base leading-7 overflow-y-auto max-h-96">
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-6 overflow-y-auto max-h-96 text-sm font-mono">
               {prompt}
-            </pre>
-
-           
+            </div>
           </div>
         </div>
       </div>

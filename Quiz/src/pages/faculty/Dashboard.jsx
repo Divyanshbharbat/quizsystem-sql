@@ -147,7 +147,7 @@ const Dashboard = ({ role: propRole }) => {
   return (
     <div className="flex min-h-screen bg-gray-50 text-gray-800">
       <div className="flex-grow">
-        <Navbar userName={`Hey, ${facultyDetails.name}`} />
+        <Navbar userName={facultyDetails?.name || "Faculty Dashboard"} />
         <main className="p-8">
           <div className="space-y-8">
             {/* Top Stats */}

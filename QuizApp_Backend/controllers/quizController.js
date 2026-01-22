@@ -1,6 +1,6 @@
 import Quiz from "../models/Quiz.js";
 import QuizProgress from "../models/QuizProgress.js";
-
+import QuizSubmission from "../models/QuizSubmission.js";
 import Student from "../models/Student.js";
 import Papa from "papaparse";
 import cloudinary from "../config/cloudinary.js";
@@ -946,13 +946,11 @@ export const getQuiz = async (req, res) => {
 
     console.log("[GET QUIZ] QuizConfig timeLimit:", quizConfig.timeLimit, "Type:", typeof quizConfig.timeLimit);
 
-    // ================= FETCH / CREATE PROGRESS =================
-    let progress = await QuizProgress.findOne({
+    // ================= FETCH / CREATE PROGRESS (ATOMIC) =================
+    // ✅ Use findOrCreate to avoid race conditions with multiple concurrent requests
+    const [progress, isNewProgress] = await QuizProgress.findOrCreate({
       where: { studentId, quizId },
-    });
-
-    if (!progress) {
-      progress = await QuizProgress.create({
+      defaults: {
         studentId,
         quizId,
         currentQuestionIndex: 0,
@@ -960,7 +958,13 @@ export const getQuiz = async (req, res) => {
         timeLeft: quizConfig.timeLimit * 60,
         answers: [],
         questionMap: {},
-      });
+      },
+    });
+
+    if (isNewProgress) {
+      console.log("[GET QUIZ] ✅ New QuizProgress created for student");
+    } else {
+      console.log("[GET QUIZ] ℹ️ Using existing QuizProgress for student");
     }
 
     // ================= BLOCK CHECK =================
@@ -1003,26 +1007,29 @@ export const getQuiz = async (req, res) => {
       const savedAnswers = progress.answers || [];
       let selectionsWithQuestions = [];
 
-      if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
-        quizConfig.selections.forEach(sel => {
-          const questions = Object.entries(progress.questionMap)
-            .filter(([_, q]) => q.subcategory === sel.subcategory)
-            .map(([id, q]) => ({
-              id,
-              question: q.question,
-              options: q.options,
-              image: q.image || null,
-              description: q.description || null,
-              type: q.type || "text",
-              selectedOption:
-                savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
-            }));
+      // ✅ Safety check for selections
+      if (quizConfig.selections && Array.isArray(quizConfig.selections)) {
+        if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
+          quizConfig.selections.forEach(sel => {
+            const questions = Object.entries(progress.questionMap)
+              .filter(([_, q]) => q.subcategory === sel.subcategory)
+              .map(([id, q]) => ({
+                id,
+                question: q.question,
+                options: q.options,
+                image: q.image || null,
+                description: q.description || null,
+                type: q.type || "text",
+                selectedOption:
+                  savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
+              }));
 
-          selectionsWithQuestions.push({
-            subcategory: sel.subcategory,
-            questions,
+            selectionsWithQuestions.push({
+              subcategory: sel.subcategory,
+              questions,
+            });
           });
-        });
+        }
       }
 
       return res.json({
@@ -1071,25 +1078,28 @@ export const getQuiz = async (req, res) => {
     if (progress.questionMap && Object.keys(progress.questionMap).length > 0) {
       const selectionsWithQuestions = [];
 
-      quizConfig.selections.forEach(sel => {
-        const questions = Object.entries(progress.questionMap)
-          .filter(([_, q]) => q.subcategory === sel.subcategory)
-          .map(([id, q]) => ({
-            id,
-            question: q.question,
-            options: q.options,
-            image: q.image || null,
-            description: q.description || null,
-            type: q.type || "text",
-            selectedOption:
-              savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
-          }));
+      // ✅ Safety check for selections
+      if (quizConfig.selections && Array.isArray(quizConfig.selections)) {
+        quizConfig.selections.forEach(sel => {
+          const questions = Object.entries(progress.questionMap)
+            .filter(([_, q]) => q.subcategory === sel.subcategory)
+            .map(([id, q]) => ({
+              id,
+              question: q.question,
+              options: q.options,
+              image: q.image || null,
+              description: q.description || null,
+              type: q.type || "text",
+              selectedOption:
+                savedAnswers.find(a => a.questionId === id)?.selectedOption ?? null,
+            }));
 
-        selectionsWithQuestions.push({
-          subcategory: sel.subcategory,
-          questions,
+          selectionsWithQuestions.push({
+            subcategory: sel.subcategory,
+            questions,
+          });
         });
-      });
+      }
 
       // ✅ Calculate time penalty: time that passed during block expiration
       let adjustedTimeLeft = progress.timeLeft;
@@ -1150,6 +1160,17 @@ export const getQuiz = async (req, res) => {
     console.log("[GET_QUIZ]   Seed: " + quizId + "_" + studentId + " (deterministic)");
     console.log("[GET_QUIZ]   🎯 Different students = different questions");
     console.log("[GET_QUIZ]   🔒 Same student = same questions on refresh");
+    
+    // ✅ Safety check: selections must exist and be an array
+    if (!quizConfig.selections || !Array.isArray(quizConfig.selections) || quizConfig.selections.length === 0) {
+      console.error("[GET_QUIZ] ❌ ERROR: QuizConfig has no valid selections!");
+      console.error("[GET_QUIZ] selections:", quizConfig.selections);
+      return res.status(400).json({
+        success: false,
+        message: "Quiz configuration error: No question selections defined. Please contact your instructor.",
+        data: { quizConfig, selectionsWithQuestions: [], progress }
+      });
+    }
     
     const allQuizzes = await Quiz.findAll();
     console.log("[GET_QUIZ] Found " + allQuizzes.length + " Quiz document(s)");

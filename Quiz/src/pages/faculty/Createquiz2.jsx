@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import Navbar from "../../components/Navbar";
+import Sidebar from "../../components/Sidebar";
 import { useNavigate } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 
@@ -11,7 +12,6 @@ const CreateQuiz2 = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [quizConfigsForForm, setQuizConfigsForForm] = useState([]);
-  const [quizConfigsForTable, setQuizConfigsForTable] = useState([]);
 
   const [title, setTitle] = useState("");
   const [timeLimit, setTimeLimit] = useState("");
@@ -22,10 +22,6 @@ const CreateQuiz2 = () => {
   const [subcategorySearch, setSubcategorySearch] = useState("");
   const [selectedSubs, setSelectedSubs] = useState({});
   const [editId, setEditId] = useState(null);
-
-  const [selectedDate, setSelectedDate] = useState("");
-  const [selectedDepartment, setSelectedDepartment] = useState("");
-  const [lastRefreshTime, setLastRefreshTime] = useState(null); // ✅ Track refresh time
 
   /* ================= AUTH CHECK ================= */
   useEffect(() => {
@@ -63,8 +59,7 @@ const CreateQuiz2 = () => {
       }
       
       setQuizConfigsForForm(categories);
-      setLastRefreshTime(new Date().toLocaleTimeString());
-      toast.success("✅ Categories refreshed!", { duration: 2000 });
+      toast.success("✅ Categories loaded!", { duration: 1500 });
       return categories;
     } catch (err) {
       console.error("[CREATE_QUIZ2] ❌ Error refreshing categories:", err);
@@ -76,37 +71,11 @@ const CreateQuiz2 = () => {
     }
   };
 
-  /* ================= FORM DATA - AUTO REFRESH ================= */
+  /* ================= FORM DATA - LOAD ON MOUNT ================= */
   useEffect(() => {
-    // Initial load
+    // Initial load only - no auto-refresh
     refreshCategories();
-    
-    // ✅ Auto-refresh every 10 seconds to catch newly uploaded image questions
-    const refreshInterval = setInterval(() => {
-      console.log("[CREATE_QUIZ2] ⏰ Auto-refreshing categories...");
-      refreshCategories();
-    }, 10000);
-
-    return () => clearInterval(refreshInterval);
   }, []);
-
-  /* ================= TABLE DATA ================= */
-  const fetchTableData = async () => {
-    if (!facultyDetails?.id) return;
-    try {
-      const res = await axios.get(
-        `${import.meta.env.VITE_APP}/api/quizzes/gettabledata`,
-        { params: { facultyId: facultyDetails.id } }
-      );
-      setQuizConfigsForTable(res.data?.data || []);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  useEffect(() => {
-    if (facultyDetails?.id) fetchTableData();
-  }, [facultyDetails]);
 
   /* ================= CATEGORY ================= */
   const handleCategoryChange = (category) => {
@@ -175,7 +144,7 @@ const CreateQuiz2 = () => {
           `${import.meta.env.VITE_APP}/api/quizzes/config/${editId}`,
           { selections, facultyId: facultyDetails.id }
         );
-        alert("Updated successfully");
+        toast.success("Updated successfully");
       } else {
         await axios.post(
           `${import.meta.env.VITE_APP}/api/quizzes/create-config`,
@@ -187,12 +156,11 @@ const CreateQuiz2 = () => {
             facultyId: facultyDetails.id,
           }
         );
-        alert("Created successfully");
+        toast.success("Created successfully");
       }
       resetForm();
-      fetchTableData();
     } catch (err) {
-      alert("Operation failed");
+      toast.error("Operation failed");
     }
   };
 
@@ -225,384 +193,223 @@ const CreateQuiz2 = () => {
       `${import.meta.env.VITE_APP}/api/quizzes/config/${id}`,
       { data: { facultyId: facultyDetails.id } }
     );
-    fetchTableData();
+    toast.success("Quiz deleted successfully");
   };
 
-  const handleSeeResult = (id) => navigate(`/seeresult/${id}`);
-
-  /* ================= DATE & DEPARTMENT FILTER ================= */
-  const availableDates = [
-    ...new Set(
-      quizConfigsForTable.map((q) =>
-        new Date(q.createdAt).toISOString().split("T")[0]
-      )
-    ),
-  ];
-
-  const availableDepartments = [
-    ...new Set(
-      quizConfigsForTable.map((q) => q.createdByDetails?.department).filter(Boolean)
-    ),
-  ];
-
-  const filteredTableData = quizConfigsForTable.filter((q) => {
-    const dateMatch = !selectedDate || new Date(q.createdAt).toISOString().split("T")[0] === selectedDate;
-    const deptMatch = !selectedDepartment || q.createdByDetails?.department === selectedDepartment;
-    return dateMatch && deptMatch;
-  });
-
-  const groupedQuizConfigs = filteredTableData.reduce((acc, item) => {
-    if (!acc[item.quizConfigId]) {
-      acc[item.quizConfigId] = {
-        quizConfigId: item.quizConfigId,
-        title: item.title,
-        category: item.category,
-        createdAt: item.createdAt,
-        createdBy: item.createdByDetails,
-        subcategories: [],
-      };
-    }
-
-    acc[item.quizConfigId].subcategories.push({
-      name: item.subcategory,
-      available: item.totalQuestionsAvailable,
-      selected: item.selectedQuestions,
-    });
-
-    return acc;
-  }, {});
+  const handleSeeResult = (id) => navigate(`/quiz-results/${id}`);
 
   /* ================= UI ================= */
   return (
-    <div className="bg-gray-50 min-h-screen">
+    <div className="flex min-h-screen bg-gray-50">
       <Toaster />
-      <Navbar
-        userName={facultyDetails?.name}
-        onProfileClick={() => setSidebarOpen(!sidebarOpen)}
-      />
+      <Sidebar />
+      
+      <div className="flex-1">
+        <Navbar
+          userName={facultyDetails?.name}
+          onProfileClick={() => setSidebarOpen(!sidebarOpen)}
+        />
 
-      <div className="p-6">
+        <div className="p-6">
         {/* ================= FORM ================= */}
         <div className="bg-white border rounded-lg p-6 mb-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h5 className="fw-semibold m-0">
               {editId ? "Update Quiz Config" : "Create Quiz Config"}
             </h5>
-            <button
-              type="button"
-              onClick={async () => {
-                toast.loading("🔄 Refreshing categories...", { id: "refresh-cat" });
-                const categories = await refreshCategories();
-                if (categories.length > 0) {
-                  toast.success(`✅ Found ${categories.length} category combinations!`, { id: "refresh-cat" });
-                } else {
-                  toast.info("ℹ️ No categories found. Upload image questions first.", { id: "refresh-cat" });
-                }
-              }}
-              className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-lg transition"
-              title="Refresh to see newly uploaded image-based questions"
-            >
-              🔄 Refresh Categories
-            </button>
           </div>
 
-          {/* ✅ Status indicator */}
-          {lastRefreshTime && (
-            <div className="text-xs text-gray-500 mb-3">
-              ✅ Auto-refreshing every 10 seconds | Last refreshed: {lastRefreshTime}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <input
-              className="form-control mb-3"
-              placeholder="Quiz Title"
-              value={title}
-              disabled={!!editId}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
-
-            {!editId && (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Quiz Title</label>
               <input
-                type="number"
-                className="form-control mb-3"
-                placeholder="Time Limit (min)"
-                value={timeLimit}
-                onChange={(e) => setTimeLimit(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter quiz title"
+                value={title}
+                disabled={!!editId}
+                onChange={(e) => setTitle(e.target.value)}
                 required
               />
-            )}
+            </div>
 
-            <div className="mb-3 position-relative">
-              <div className="d-flex align-items-center">
+            {!editId && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Time Limit (minutes)</label>
                 <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Search & Select Category"
-                  value={selectedCategory ? selectedCategory : categorySearch}
-                  disabled={!!editId}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCategorySearch(value);
-                    setShowCategoryDropdown(true);
-                    // Only clear selectedCategory if user is actively typing
-                    if (selectedCategory && value !== selectedCategory) {
-                      setSelectedCategory("");
-                    }
-                  }}
-                  onFocus={() => {
-                    setShowCategoryDropdown(true);
-                    if (selectedCategory) {
-                      setCategorySearch("");
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      setShowCategoryDropdown(false);
-                      setCategorySearch("");
-                    }, 200);
-                  }}
+                  type="number"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter time limit"
+                  value={timeLimit}
+                  onChange={(e) => setTimeLimit(e.target.value)}
                   required
                 />
-                {selectedCategory && (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary ms-2"
-                    onClick={() => {
-                      setSelectedCategory("");
-                      setCategorySearch("");
-                      setShowCategoryDropdown(false);
-                      setSubcategories([]);
-                      setSelectedSubs({});
-                    }}
-                  >
-                    ✕ Clear
-                  </button>
-                )}
               </div>
-              {showCategoryDropdown && !editId && (
-                <div
-                  className="position-absolute bg-white border rounded mt-1 w-100"
-                  style={{
-                    zIndex: 1000,
-                    maxHeight: "200px",
-                    overflowY: "auto",
-                    top: "calc(100% + 2px)",
-                    left: 0,
-                  }}
-                >
-                  {getFilteredCategories().length > 0 ? (
-                    getFilteredCategories().map((c) => (
-                      <div
-                        key={c}
-                        className="p-2 cursor-pointer"
-                        style={{
-                          cursor: "pointer",
-                          padding: "10px 12px",
-                          borderBottom: "1px solid #eee",
-                          fontWeight: c === selectedCategory ? "bold" : "normal",
-                          backgroundColor: c === selectedCategory ? "#e7f3ff" : "white",
-                        }}
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          handleCategoryChange(c);
-                        }}
-                        onMouseEnter={(e) => {
-                          if (c !== selectedCategory) {
-                            e.target.style.backgroundColor = "#f0f0f0";
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          e.target.style.backgroundColor = c === selectedCategory ? "#e7f3ff" : "white";
-                        }}
-                      >
-                        {c}
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-2 text-muted">No categories found</div>
+            )}
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Category</label>
+              <div className="relative">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search & select category"
+                    value={selectedCategory ? selectedCategory : categorySearch}
+                    disabled={!!editId}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCategorySearch(value);
+                      setShowCategoryDropdown(true);
+                      if (selectedCategory && value !== selectedCategory) {
+                        setSelectedCategory("");
+                      }
+                    }}
+                    onFocus={() => {
+                      setShowCategoryDropdown(true);
+                      if (selectedCategory) {
+                        setCategorySearch("");
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowCategoryDropdown(false);
+                        setCategorySearch("");
+                      }, 200);
+                    }}
+                    required
+                  />
+                  {selectedCategory && (
+                    <button
+                      type="button"
+                      className="px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                      onClick={() => {
+                        setSelectedCategory("");
+                        setCategorySearch("");
+                        setShowCategoryDropdown(false);
+                        setSubcategories([]);
+                        setSelectedSubs({});
+                      }}
+                    >
+                      ✕ Clear
+                    </button>
                   )}
                 </div>
-              )}
+                {showCategoryDropdown && !editId && (
+                  <div
+                    className="absolute w-full bg-white border border-gray-300 rounded-lg mt-1 shadow-lg z-10"
+                    style={{
+                      maxHeight: "200px",
+                      overflowY: "auto",
+                    }}
+                  >
+                    {getFilteredCategories().length > 0 ? (
+                      getFilteredCategories().map((c) => (
+                        <div
+                          key={c}
+                          className="px-4 py-3 cursor-pointer border-b border-gray-200 last:border-b-0 hover:bg-blue-50 transition-colors"
+                          style={{
+                            fontWeight: c === selectedCategory ? "600" : "normal",
+                            backgroundColor: c === selectedCategory ? "#eff6ff" : "white",
+                          }}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            handleCategoryChange(c);
+                          }}
+                        >
+                          {c}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="px-4 py-3 text-gray-500">No categories found</div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {subcategories.length > 0 && (
-              <div className="mb-3">
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-gray-700">Select Subcategories & Questions</label>
                 <input
                   type="text"
-                  className="form-control mb-2"
-                  placeholder="Search Subcategory"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Search subcategories..."
                   value={subcategorySearch}
                   onChange={(e) => setSubcategorySearch(e.target.value)}
                 />
-                {getFilteredSubcategories().map((s) => (
-                  <div key={s.name} className="d-flex align-items-center mb-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedSubs[s.name] > 0}
-                      onChange={(e) =>
-                        setSelectedSubs((prev) =>
-                          e.target.checked
-                            ? { ...prev, [s.name]: 1 }
-                            : (() => {
-                                const x = { ...prev };
-                                delete x[s.name];
-                                return x;
-                              })()
-                        )
-                      }
-                    />
-                    <span className="mx-3">{s.name}</span>
-                    <input
-                      type="number"
-                      className="form-control w-25"
-                      value={selectedSubs[s.name] || ""}
-                      disabled={!selectedSubs[s.name]}
-                      onChange={(e) =>
-                        handleQuestionCount(s.name, e.target.value)
-                      }
-                    />
-                    <span className="ms-2 text-muted">
-                      / {s.questionsAvailable}
-                    </span>
-                  </div>
-                ))}
-                {getFilteredSubcategories().length === 0 && subcategories.length > 0 && (
-                  <div className="text-muted">No subcategories match your search</div>
-                )}
+                <div className="space-y-3 mt-4">
+                  {getFilteredSubcategories().map((s) => (
+                    <div key={s.name} className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedSubs[s.name] > 0}
+                            onChange={(e) =>
+                              setSelectedSubs((prev) =>
+                                e.target.checked
+                                  ? { ...prev, [s.name]: 1 }
+                                  : (() => {
+                                      const x = { ...prev };
+                                      delete x[s.name];
+                                      return x;
+                                    })()
+                              )
+                            }
+                            className="w-5 h-5 cursor-pointer accent-blue-500"
+                          />
+                          <span className="font-semibold text-gray-800">{s.name}</span>
+                        </div>
+                        <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded">
+                          Max: {s.questionsAvailable}
+                        </span>
+                      </div>
+                      
+                      {selectedSubs[s.name] > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-gray-600 w-24">Select: {selectedSubs[s.name]}</span>
+                            <input
+                              type="range"
+                              min="1"
+                              max={s.questionsAvailable}
+                              value={selectedSubs[s.name] || 1}
+                              onChange={(e) =>
+                                handleQuestionCount(s.name, e.target.value)
+                              }
+                              className="flex-1 h-2 bg-blue-300 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                            <div className="bg-blue-500 text-white rounded-lg px-4 py-2 font-bold text-center w-14">
+                              {selectedSubs[s.name]}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {getFilteredSubcategories().length === 0 && subcategories.length > 0 && (
+                    <div className="text-center py-6 text-gray-500">No subcategories match your search</div>
+                  )}
+                </div>
               </div>
             )}
 
-            <button className="btn btn-success mt-3">
-              {editId ? "Update" : "Create"}
+            <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors mt-4">
+              {editId ? "Update Quiz" : "Create Quiz"}
             </button>
           </form>
         </div>
 
-        {/* ================= TABLE ================= */}
-        <div className="bg-white border rounded-lg shadow-sm">
-          <div className="p-4 bg-dark text-white">
-            <h5 className="mb-3">Quiz Configuration Summary</h5>
-            <div className="d-flex gap-3" style={{ flexWrap: "wrap" }}>
-              <div className="flex-grow-1" style={{ minWidth: "250px" }}>
-                <label className="form-label text-white mb-2">Filter by Date</label>
-                <select
-                  className="form-select"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                >
-                  <option value="">All Dates</option>
-                  {availableDates.map((d) => (
-                    <option key={d} value={d}>
-                      {new Date(d).toDateString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {facultyDetails?.isAdmin && availableDepartments.length > 0 && (
-                <div className="flex-grow-1" style={{ minWidth: "250px" }}>
-                  <label className="form-label text-white mb-2">Filter by Department</label>
-                  <select
-                    className="form-select"
-                    value={selectedDepartment}
-                    onChange={(e) => setSelectedDepartment(e.target.value)}
-                  >
-                    <option value="">All Departments</option>
-                    {availableDepartments.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="p-4 table-responsive">
-            <table className="table table-bordered table-hover">
-              <thead className="table-dark">
-                <tr>
-                  <th>#</th>
-                  <th>Title</th>
-                  {facultyDetails?.isAdmin && <th>Created By</th>}
-                  <th>Category</th>
-                  <th>Date & Time</th>
-                  <th>Subcategories</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {Object.values(groupedQuizConfigs).map((quiz, i) => (
-                  <tr key={quiz.quizConfigId}>
-                   <td>{quiz.quizConfigId}</td>
-
-                    <td>{quiz.title}</td>
-
-                    {facultyDetails?.isAdmin && (
-                      <td>
-                        <b>{quiz.createdBy?.name}</b>
-                        <div className="text-muted text-sm">
-                          {quiz.createdBy?.department}
-                        </div>
-                      </td>
-                    )}
-
-                    <td>
-                      <span className="badge bg-primary">
-                        {quiz.category}
-                      </span>
-                    </td>
-
-                    <td>{new Date(quiz.createdAt).toLocaleString()}</td>
-
-                    <td>
-                      {quiz.subcategories.map((s, j) => (
-                        <div key={j}>
-                          {s.name}: {s.selected}/{s.available}
-                        </div>
-                      ))}
-                    </td>
-
-                    <td>
-                      <button
-                        className="btn btn-sm btn-warning me-2"
-                        onClick={() => handleEdit(quiz)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="btn btn-sm btn-primary me-2"
-                        onClick={() =>
-                          handleSeeResult(quiz.quizConfigId)
-                        }
-                      >
-                        Result
-                      </button>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() =>
-                          handleDelete(quiz.quizConfigId)
-                        }
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-
-                {Object.values(groupedQuizConfigs).length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="text-center text-muted">
-                      No data found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        {/* LINK TO MY QUIZZES */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg p-6 mb-6">
+          <p className="text-gray-800 font-semibold mb-3">📚 View your created quizzes</p>
+          <button
+            onClick={() => navigate("/myquizzes")}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+          >
+            Go to My Quizzes →
+          </button>
+        </div>
         </div>
       </div>
     </div>

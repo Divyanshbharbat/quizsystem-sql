@@ -176,18 +176,18 @@ const AdminDashboard = () => {
     }
     try {
       const res = await axios.put(
-        `${import.meta.env.VITE_APP}/api/student/admin/password/${selectedStudent.id}`,
+        `${import.meta.env.VITE_APP}/api/student/admin/password/${selectedStudent.studentId}`,
         { password: newPassword }
       );
       if (res.data.success) {
-        toast.success("Password updated successfully");
+        toast.success("✅ Password updated successfully");
         setStudentPasswordModal(false);
         setNewPassword("");
         setOldPassword("");
       }
     } catch (err) {
       console.error(err);
-      toast.error("Error updating password");
+      toast.error("❌ Error updating password");
     }
   };
 
@@ -889,20 +889,10 @@ const AdminDashboard = () => {
         {PromoteStudentsModal()}
 
         <main className="p-8 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6 text-[#1d285d]">Admin Dashboard</h1>
+          <h1 className="text-3xl font-bold mb-6 text-gray-800">⚙️ Admin Dashboard</h1>
 
           {/* TABS */}
-          <div className="flex gap-4 mb-6 border-b">
-            <button
-              onClick={() => setActiveTab("students")}
-              className={`px-6 py-3 font-semibold transition ${
-                activeTab === "students"
-                  ? "border-b-4 border-blue-600 text-blue-600"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Student Management
-            </button>
+          <div className="flex gap-4 mb-6 border-b border-gray-300">
             <button
               onClick={() => setActiveTab("faculty")}
               className={`px-6 py-3 font-semibold transition ${
@@ -911,121 +901,11 @@ const AdminDashboard = () => {
                   : "text-gray-600 hover:text-gray-800"
               }`}
             >
-              Faculty Management
+              👥 Faculty Management
             </button>
           </div>
 
-          {/* ==================== STUDENT MANAGEMENT TAB ==================== */}
-          {activeTab === "students" && (
-            <div>
-              {/* Year Filter Buttons */}
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold mb-3 text-gray-700">Filter by Year</h2>
-                <div className="flex gap-3 flex-wrap items-center">
-                  {[1, 2, 3, 4].map((year) => (
-                    <button
-                      key={year}
-                      onClick={() => handleYearClick(year)}
-                      className={`px-6 py-2 rounded-md font-semibold transition ${
-                        selectedYear === year
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                      }`}
-                    >
-                      {year} Year
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setPromoteModal(true)}
-                    className="px-6 py-2 rounded-md font-semibold bg-green-600 text-white hover:bg-green-700 transition"
-                  >
-                    Promote to Next Year
-                  </button>
-                </div>
-                {selectedYear && (
-                  <p className="mt-3 text-sm text-gray-600">
-                    Showing: {selectedYear} Year | Total Students: {filteredStudents.length}
-                  </p>
-                )}
-              </div>
-
-              {/* Department Filter */}
-              <div className="mb-6">
-                <h2 className="text-lg font-semibold mb-3 text-gray-700">Filter by Department</h2>
-                <select
-                  value={selectedStudentDept}
-                  onChange={(e) => setSelectedStudentDept(e.target.value)}
-                  className="border p-3 rounded-md w-full max-w-md"
-                >
-                  <option value="">-- All Departments --</option>
-                  {allDepartments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Search */}
-              <div className="mb-6">
-                <input
-                  type="text"
-                  placeholder="Search by name/ID/email"
-                  className="border p-3 rounded-md w-full max-w-md"
-                  value={searchStudentTerm}
-                  onChange={(e) => setSearchStudentTerm(e.target.value)}
-                />
-              </div>
-
-              {/* Students Table */}
-              <div className="overflow-x-auto bg-white border rounded shadow">
-                <table className="min-w-full">
-                  <thead className="bg-[#243278] text-white text-left text-sm">
-                    <tr>
-                      <th className="px-6 py-3">Sr No</th>
-                      <th className="px-6 py-3">Name</th>
-                      <th className="px-6 py-3">Student ID</th>
-                      <th className="px-6 py-3">Email</th>
-                      <th className="px-6 py-3">Phone</th>
-                      <th className="px-6 py-3">Year</th>
-                      <th className="px-6 py-3">Department</th>
-                      <th className="px-6 py-3">Actions</th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y text-sm">
-                    {filteredStudents.map((student, index) => (
-                      <tr key={student.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-3">{index + 1}</td>
-                        <td className="px-6 py-3 font-semibold">{student.name}</td>
-                        <td className="px-6 py-3">{student.studentId}</td>
-                        <td className="px-6 py-3">{student.email}</td>
-                        <td className="px-6 py-3">{student.phone}</td>
-                        <td className="px-6 py-3">{student.year}</td>
-                        <td className="px-6 py-3">{student.department}</td>
-                        <td className="px-6 py-3">
-                          <button
-                            onClick={() => handleEditStudent(student)}
-                            className="text-blue-600 hover:underline"
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-
-                    {filteredStudents.length === 0 && (
-                      <tr>
-                        <td colSpan="8" className="text-center py-4 text-gray-500">
-                          No students found.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}          {/* ==================== FACULTY MANAGEMENT TAB ==================== */}
+          {/* ==================== FACULTY MANAGEMENT TAB ==================== */}
           {activeTab === "faculty" && (
             <div>
               {/* Search & Filter */}

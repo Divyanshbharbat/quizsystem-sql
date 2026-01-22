@@ -1,8 +1,33 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Poppins:wght@500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+* {
+    font-family: 'Poppins', 'Inter', sans-serif !important;
+}
+
+html, body {
+    font-family: 'Poppins', 'Inter', sans-serif;
+    font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', 'Inter', sans-serif;
+    font-weight: 600;
+}
+
+button {
+    font-family: 'Poppins', 'Inter', sans-serif;
+    font-weight: 500;
+}
+
+input, textarea, select {
+    font-family: 'Poppins', 'Inter', sans-serif;
+    font-weight: 400;
+}
+
 /* Add this to your CSS file */
 .circular-progress {
     width: 200px; /* Set a manageable size */
@@ -37,9 +62,4 @@
 
 .circular-chart:hover .tooltip {
     visibility: visible; /* Show on hover */
-}
-
- 
-body{
-    font-family:'Poppins',sens-serif;
 }

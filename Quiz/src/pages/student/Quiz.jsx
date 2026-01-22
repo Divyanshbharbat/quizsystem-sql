@@ -19,11 +19,11 @@ import {
 const OptionButton = ({ option, isSelected, onClick, disabled }) => (
   <button
     onClick={() => !disabled && onClick(option)}
-    className={`flex items-center justify-center text-center gap-2 p-6 md:p-8 rounded-xl border-3 transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-offset-2 select-none break-words font-semibold text-lg md:text-xl
+    className={`flex items-center justify-center text-center gap-2 p-4 md:p-5 rounded-xl border-3 transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-offset-2 select-none break-words font-semibold text-base md:text-lg
       ${isSelected
         ? "bg-gradient-to-br from-green-500 to-green-600 text-white border-green-700 shadow-2xl scale-105"
         : "bg-gradient-to-br from-white to-gray-50 border-gray-300 hover:border-green-500 hover:shadow-lg hover:scale-102"}`}
-    style={{ userSelect: "none", minHeight: 100 }}
+    style={{ userSelect: "none", minHeight: 80 }}
     disabled={disabled}
     aria-pressed={isSelected}
   >
@@ -55,10 +55,10 @@ const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled 
       </h2>
 
       {question.image ? (
-        <div className="flex flex-col gap-8">
-          {/* IMAGE SECTION - FULL WIDTH AND LARGE */}
+        <div className="flex flex-col gap-6">
+          {/* IMAGE SECTION - OPTIMIZED HEIGHT */}
           <div className="w-full flex justify-center items-center">
-            <div className="w-full rounded-lg overflow-hidden border-4 border-blue-300 relative bg-gradient-to-br from-gray-50 to-gray-100" style={{ maxHeight: "75vh", maxWidth: "100%" }}>
+            <div className="w-full rounded-lg overflow-hidden border-4 border-blue-300 relative bg-gradient-to-br from-gray-50 to-gray-100" style={{ maxHeight: "45vh", maxWidth: "100%" }}>
               {!imageLoaded && !imageError && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
                   <div className="text-center">
@@ -87,15 +87,15 @@ const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled 
                   setImageError(true);
                   console.error("[IMAGE ERROR] Failed to load image:", question.image);
                 }}
-                style={{ display: imageLoaded && !imageError ? "block" : "none", minHeight: "300px" }}
+                style={{ display: imageLoaded && !imageError ? "block" : "none", minHeight: "200px" }}
               />
             </div>
           </div>
 
-          {/* OPTIONS SECTION - LARGE AND CLEAR */}
+          {/* OPTIONS SECTION - VISIBLE WITHOUT SCROLLING */}
           <div className="w-full">
-            <p className="text-sm font-semibold text-gray-600 mb-4">Select your answer:</p>
-            <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
+            <p className="text-sm font-semibold text-gray-600 mb-3">Select your answer:</p>
+            <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))" }}>
               {question.options.map((opt, idx) => (
                 <OptionButton
                   key={idx}
@@ -532,8 +532,29 @@ useEffect(() => {
       const quiz = data.data.quizConfig;
       const progress = data.data.progress;
       const selectionsWithQuestions = data.data.selectionsWithQuestions; // ✅ Get questions from backend
+      
+      console.log("[QUIZ LOAD] ✅ Backend response received");
+      console.log("[QUIZ LOAD] QuizConfig:", {
+        id: quiz?.id,
+        title: quiz?.title,
+        timeLimit: quiz?.timeLimit,
+      });
       console.log("[QUIZ LOAD] Progress:", progress);
-      console.log("[QUIZ LOAD] Selections:", selectionsWithQuestions);
+      console.log("[QUIZ LOAD] Selections structure:", {
+        isArray: Array.isArray(selectionsWithQuestions),
+        count: selectionsWithQuestions?.length || 0,
+        structure: selectionsWithQuestions?.map(s => ({
+          subcategory: s.subcategory,
+          questionsCount: s.questions?.length || 0,
+        })) || [],
+      });
+      
+      if (!selectionsWithQuestions || selectionsWithQuestions.length === 0) {
+        console.error("[QUIZ LOAD] ❌ CRITICAL: selectionsWithQuestions is empty or undefined!");
+        console.error("[QUIZ LOAD] Full data object:", data.data);
+        return;
+      }
+      
       if (selectionsWithQuestions && selectionsWithQuestions.length > 0) {
         console.log("[QUIZ LOAD] First selection:", selectionsWithQuestions[0]);
         if (selectionsWithQuestions[0].questions && selectionsWithQuestions[0].questions.length > 0) {
@@ -569,12 +590,17 @@ useEffect(() => {
 
       // Load progress if exists
       if (progress) {
+        console.log("[QUIZ LOAD] Has existing progress, setting current question and skipping countdown");
         setCurrentQuestionIndex(progress.currentQuestionIndex || 0);
         setAnswers(progress.answers || []);
         setShowStartingLoader(false); // skip countdown if resuming
+      } else {
+        console.log("[QUIZ LOAD] No existing progress, will show countdown");
       }
 
+      console.log("[QUIZ LOAD] About to call setProgressLoaded(true)");
       setProgressLoaded(true);
+      console.log("[QUIZ LOAD] ✅ setProgressLoaded(true) CALLED!");
       // Request fullscreen synchronously (after short delay for render)
       setTimeout(() => enterFullscreen(), 100);
     } catch (error) {
@@ -667,33 +693,78 @@ useEffect(() => {
      Shuffle Questions & Options
   --------------------- */
 useEffect(() => {
-  console.log("[SHUFFLE] Check - selections:", selections.length, "progressLoaded:", progressLoaded, "student:", !!student);
+  console.log("[SHUFFLE] Check conditions:", {
+    selectionsLength: selections.length,
+    progressLoaded,
+    hasStudent: !!student,
+    answersLength: answers.length,
+  });
   
   if (selections.length > 0 && progressLoaded && student) {
     let flatQuestions = [];
 
-    selections.forEach((s) => {
-      console.log("[SHUFFLE] Processing subcategory:", s.subcategory, "questions count:", s.questions?.length || 0);
+    selections.forEach((s, idx) => {
+      console.log(`[SHUFFLE] Processing selection ${idx + 1}/${selections.length}:`, {
+        subcategory: s.subcategory,
+        questionsCount: s.questions?.length || 0,
+        questionsLoaded: !!s.questions,
+      });
       
-      s.questions.forEach((q) => {
-        if (q && q.options) {
-          // Use selectedOption from backend (already set based on progress)
-          const savedAnswer = q.selectedOption || null;
+      if (!s.questions || !Array.isArray(s.questions)) {
+        console.warn("[SHUFFLE] ⚠️ Selection has no questions array:", s);
+        return;
+      }
 
-          flatQuestions.push({
-            ...q,
-            subcategory: s.subcategory,
-            options: seededShuffle(q.options, student.id + q.id),
-            savedSelectedOption: savedAnswer,
-          });
+      s.questions.forEach((q, qIdx) => {
+        if (!q) {
+          console.warn("[SHUFFLE] ⚠️ Question is null/undefined at index", qIdx);
+          return;
         }
+        
+        if (!q.options) {
+          console.warn("[SHUFFLE] ⚠️ Question missing options:", q);
+          return;
+        }
+
+        // Use selectedOption from backend (already set based on progress)
+        const savedAnswer = q.selectedOption || null;
+
+        const processedQuestion = {
+          ...q,
+          subcategory: s.subcategory,
+          options: seededShuffle(q.options, student.id + q.id),
+          savedSelectedOption: savedAnswer,
+        };
+        
+        flatQuestions.push(processedQuestion);
+        console.log(`[SHUFFLE] Added Q${q.id}:`, {
+          type: q.type || "text",
+          hasImage: !!q.image,
+          optionsCount: q.options.length,
+        });
       });
     });
 
-    console.log("[SHUFFLE] Flat questions created:", flatQuestions.length);
+    console.log("[SHUFFLE] ✅ Flat questions created:", {
+      total: flatQuestions.length,
+      subcategories: selections.length,
+    });
+    
+    if (flatQuestions.length === 0) {
+      console.error("[SHUFFLE] ❌ ERROR: No questions were processed from selections!");
+      console.error("[SHUFFLE] Selections structure:", JSON.stringify(selections));
+      return;
+    }
+
     const shuffled = seededShuffle(flatQuestions, student.id + quizId);
-    console.log("[SHUFFLE] Final shuffled questions:", shuffled.length);
+    console.log("[SHUFFLE] ✅ Final shuffled questions:", {
+      total: shuffled.length,
+      firstQuestion: shuffled[0]?.id || "N/A",
+    });
+    
     setQuestions(shuffled);
+  } else {
+    console.log("[SHUFFLE] ⏳ Waiting for conditions - selections:", selections.length, "loaded:", progressLoaded, "student:", !!student);
   }
 }, [selections, progressLoaded, student, answers]);
 
@@ -702,14 +773,35 @@ useEffect(() => {
      Starting Countdown
   --------------------- */
   useEffect(() => {
-    if (!progressLoaded || questions.length === 0) return;
+    console.log("[COUNTDOWN EFFECT]", {
+      progressLoaded,
+      questionsLength: questions.length,
+      startingCountdown,
+      showStartingLoader,
+    });
+
+    if (!progressLoaded || questions.length === 0) {
+      console.log("[COUNTDOWN EFFECT] Skipping - conditions not met");
+      return;
+    }
+
+    // ✅ If we already have questions loaded AND progressLoaded is true, 
+    // don't show countdown - go straight to quiz
     if (startingCountdown > 0) {
-      const timer = setTimeout(() => setStartingCountdown((prev) => prev - 1), 1000);
+      console.log("[COUNTDOWN EFFECT] Countdown active:", startingCountdown);
+      const timer = setTimeout(() => {
+        console.log("[COUNTDOWN EFFECT] Decrementing countdown");
+        setStartingCountdown((prev) => prev - 1);
+      }, 1000);
       return () => clearTimeout(timer);
     } else {
-      setShowStartingLoader(false);
+      console.log("[COUNTDOWN EFFECT] Countdown complete (or skipped), hiding loader");
+      if (showStartingLoader) {
+        console.log("[COUNTDOWN EFFECT] Setting showStartingLoader to false");
+        setShowStartingLoader(false);
+      }
     }
-  }, [startingCountdown, progressLoaded, questions.length]);
+  }, [startingCountdown, progressLoaded, questions.length, showStartingLoader]);
 
   /* ---------------------
      Save Progress
@@ -1464,6 +1556,79 @@ const handleSubmit = async () => {
   /* ---------------------
      Loading / Countdown / Mobile Detection
   --------------------- */
+
+  // DEBUG: Log render state
+  console.log("[RENDER STATE]", {
+    progressLoaded,
+    questionsLength: questions.length,
+    showStartingLoader,
+    startingCountdown,
+    quizFrozen,
+    isMobileDevice,
+    currentQuestionIndex,
+    currentQ: !!questions[currentQuestionIndex],
+  });
+  
+  // ✅ Show loading screen while data is being fetched
+  if (!progressLoaded) {
+    console.log("[RENDER] ❌ SHOWING LOADING SCREEN - progressLoaded=false");
+    return (
+      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
+        <Navbar 
+          userName="Loading..." 
+          onProfileClick={toggleSidebar}
+          isQuizActive={false}
+        />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-16 w-16 border-4 border-b-4 border-blue-500 mb-4"></div>
+            <p className="text-lg font-semibold text-gray-700 mb-2">Loading Quiz...</p>
+            <p className="text-sm text-gray-600">Please wait while we prepare your questions</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  console.log("[RENDER] ✅ Passed progressLoaded check");
+
+  // ✅ Show error if questions failed to load
+  if (questions.length === 0 && progressLoaded && !quizFrozen) {
+    console.log("[RENDER] ❌ SHOWING ERROR SCREEN - no questions loaded");
+    return (
+      <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
+        <Navbar 
+          userName={student?.name || "Student"} 
+          onProfileClick={toggleSidebar}
+          isQuizActive={false}
+        />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="text-center max-w-md">
+            <div className="text-6xl mb-4">❌</div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-3">Error Loading Quiz</h1>
+            <p className="text-lg text-gray-600 mb-6">
+              The quiz questions could not be loaded. This may be a temporary issue.
+            </p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
+              <p className="text-sm text-gray-700 mb-2"><span className="font-semibold">Debugging info:</span></p>
+              <p className="text-xs text-gray-600">Quiz ID: {quizId}</p>
+              <p className="text-xs text-gray-600">Progress Loaded: {progressLoaded.toString()}</p>
+              <p className="text-xs text-gray-600">Questions Count: {questions.length}</p>
+              <p className="text-xs text-gray-600">Selections Count: {selections.length}</p>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold transition"
+            >
+              🔄 Reload Quiz
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  console.log("[RENDER] ✅ Passed questions check");
   
   // ✅ Show block screen FIRST, even if questions not loaded yet
   if (quizFrozen && blockCountdown >= 0) {
@@ -1544,9 +1709,9 @@ const handleSubmit = async () => {
       );
     }
   }
-    return <p className="text-center mt-20 text-lg">Loading quiz...</p>;
 
   if (isMobileDevice) {
+    console.log("[RENDER] ❌ SHOWING MOBILE WARNING");
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-600 to-blue-700 text-white p-6 select-none">
         <div className="text-center">
@@ -1572,18 +1737,31 @@ const handleSubmit = async () => {
     );
   }
 
-  if (showStartingLoader)
+  console.log("[RENDER] ✅ Passed mobile check, showStartingLoader:", showStartingLoader);
+
+  if (showStartingLoader) {
+    console.log("[RENDER] ❌ SHOWING COUNTDOWN SCREEN - startingCountdown:", startingCountdown);
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-85 backdrop-blur-sm text-white text-9xl font-bold select-none">
         {startingCountdown > 0 ? startingCountdown : "Go!"}
       </div>
     );
+  }
+
+  console.log("[RENDER] ✅ Passed all checks - SHOWING QUIZ SCREEN");
 
   const currentQ = questions[currentQuestionIndex];
 
   /* ---------------------
      FINAL RENDER
   --------------------- */
+  console.log("[FINAL RENDER]", {
+    currentQuestionIndex,
+    currentQ: !!currentQ,
+    questionId: currentQ?.id,
+    questionText: currentQ?.question?.substring(0, 50) || "N/A",
+  });
+
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-gray-50 to-gray-200 select-none">
       <Navbar 
@@ -1651,11 +1829,25 @@ const handleSubmit = async () => {
                 onOptionSelect={handleOptionClick}
                 disabled={quizFrozen || quizCompleted}
               />
+            ) : questions.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-center text-red-600">
+                  <p className="text-lg font-semibold">❌ No questions available</p>
+                  <p className="text-sm">Questions failed to load from server</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold"
+                  >
+                    Reload Page
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-600">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-b-4 border-blue-500 mb-3"></div>
                   <p className="text-lg font-semibold">Loading question...</p>
-                  <p className="text-sm">Current: {currentQuestionIndex}, Total: {questions.length}</p>
+                  <p className="text-sm">Current: {currentQuestionIndex + 1}, Total: {questions.length}</p>
                 </div>
               </div>
             )}

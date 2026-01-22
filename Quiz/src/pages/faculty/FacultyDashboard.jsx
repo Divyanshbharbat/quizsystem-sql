@@ -139,7 +139,7 @@ console.log(facultyDetails)
         }`}
       >
         <Navbar
-          userName={`Hey, ${facultyDetails.name}`}
+          userName={facultyDetails?.name || "Faculty Dashboard"}
           onProfileClick={toggleSidebar}
         />
 

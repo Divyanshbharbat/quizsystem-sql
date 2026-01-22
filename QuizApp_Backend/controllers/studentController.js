@@ -1,6 +1,8 @@
 import Student from "../models/Student.js";
 import Faculty from "../models/Faculty.js";
 import QuizConfig from "../models/QuizConfig.js";
+import QuizSubmission from "../models/QuizSubmission.js";
+import Quiz from "../models/Quiz.js";
 
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -445,9 +447,7 @@ export const uploadStudentsCSV = async (req, res) => {
 // ---------------- UPDATE STUDENT ----------------
 export const updateStudent = async (req, res) => {
   try {
-    const { name, studentId, department, year, email, phone } = req.body;
-    // ✅ Explicitly exclude password - never allow password update through this endpoint
-    // Password must be changed through dedicated forgot-password/reset-password flow
+    const { name, studentId, department, year, email, phone, password } = req.body;
 
     const student = await Student.findByPk(req.params.studentId);
     if (!student) return res.status(404).json({ success: false, message: "Student not found" });
@@ -494,15 +494,21 @@ export const updateStudent = async (req, res) => {
       }
     }
 
-    await student.update({
+    const updateData = {
       name: name || student.name,
       studentId: studentId || student.studentId,
       department: department || student.department,
       year: year || student.year,
       email: email || student.email,
       phone: phone || student.phone,
-      // ✅ Password is NOT updated here
-    });
+    };
+
+    // ✅ Hash password if provided
+    if (password) {
+      updateData.password = await bcrypt.hash(password, 10);
+    }
+
+    await student.update(updateData);
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
