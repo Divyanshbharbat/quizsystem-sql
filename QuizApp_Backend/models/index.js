@@ -20,6 +20,7 @@ Student.hasMany(QuizProgress, { foreignKey: "studentId" });
 // ✅ FIX: QuizProgress references QuizConfig (quiz_configs table), NOT Quiz (quizzes table)
 QuizProgress.belongsTo(QuizConfig, { foreignKey: "quizId" });
 QuizConfig.hasMany(QuizProgress, { foreignKey: "quizId" });
+
 export {
   sequelize,
   Student,

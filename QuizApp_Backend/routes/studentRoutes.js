@@ -48,6 +48,7 @@ router.post('/upload-csv', uploadStudentsCSV);
 
 // Update and delete student records
 router.put('/:studentId', updateStudent);
+router.put('/update/:studentId', updateStudent);  // ✅ Add this route for frontend compatibility
 router.delete('/:id', deleteStudent);
 router.delete('/delete/:studentId', deleteStudent);
 

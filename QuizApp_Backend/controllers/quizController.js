@@ -1,6 +1,5 @@
 import Quiz from "../models/Quiz.js";
 import QuizProgress from "../models/QuizProgress.js";
-import QuizSubmission from "../models/QuizSubmission.js";
 import Student from "../models/Student.js";
 import Papa from "papaparse";
 import cloudinary from "../config/cloudinary.js";
@@ -555,6 +554,69 @@ export const getQuizResults = async (req, res) => {
     }));
 
     res.json({ success: true, quizTitle: quiz.title, results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ✅ NEW: Get complete quizConfig with submissions (for results page)
+export const getQuizConfigWithSubmissions = async (req, res) => {
+  try {
+    const { quizId } = req.params;
+    const quizConfig = await QuizConfig.findByPk(quizId);
+
+    if (!quizConfig) {
+      return res.status(404).json({ success: false, message: "Quiz not found" });
+    }
+
+    // ✅ Enrich old submissions with student data
+    const enrichedCompleted = await Promise.all(
+      (quizConfig.completed || []).map(async (sub) => {
+        // If studentId is already an object with name/department, return as-is
+        if (typeof sub.studentId === 'object' && sub.studentId?.name) {
+          return sub;
+        }
+
+        // Otherwise, fetch student data and enrich the submission
+        const studentId = sub.studentId || sub.student;
+        if (!studentId) return sub;
+
+        try {
+          const student = await Student.findByPk(studentId);
+          return {
+            ...sub,
+            studentId: {
+              id: studentId,
+              name: student?.name || "-",
+              studentId: student?.studentId || "-",
+              department: student?.department || "-",
+              year: student?.year || "-"
+            }
+          };
+        } catch (err) {
+          console.error(`Failed to fetch student ${studentId}:`, err.message);
+          return {
+            ...sub,
+            studentId: {
+              id: studentId,
+              name: "-",
+              studentId: "-",
+              department: "-",
+              year: "-"
+            }
+          };
+        }
+      })
+    );
+
+    res.json({ 
+      success: true, 
+      data: {
+        ...quizConfig.toJSON(),
+        completed: enrichedCompleted
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -1374,33 +1436,37 @@ export const saveProgress = async (req, res) => {
 export const getQuizSubmissions = async (req, res) => {
   const { quizId } = req.params;
   try {
-    const quiz = await Quiz.findByPk(quizId);
-    if (!quiz) return res.status(404).json({ success: false, message: "Quiz not found" });
+    const quizConfig = await QuizConfig.findByPk(quizId);
+    if (!quizConfig) return res.status(404).json({ success: false, message: "Quiz not found" });
 
-    const submissions = await QuizSubmission.findAll({
-      where: { quizConfigId: quizId },
-      include: { model: Student, attributes: ["id", "name", "studentId"] },
-    });
+    const submissions = quizConfig.completed || [];
+    
+    // Fetch student details for each submission
+    const submissionsWithStudent = await Promise.all(submissions.map(async (sub) => {
+      const student = await Student.findByPk(sub.studentId);
+      return {
+        id: sub.id || Math.random(),
+        studentId: {
+          id: student?.id,
+          name: student?.name,
+          studentId: student?.studentId,
+          department: student?.department,
+          year: student?.year
+        },
+        submittedAt: sub.submittedAt,
+        score: sub.score,
+        totalMarks: sub.totalMarks || 100,
+        percentage: sub.percentage,
+        subcategoryScores: sub.subcategoryScores,
+        answers: sub.answers || []  // ✅ Include answers array for Excel download
+      };
+    }));
 
-    const submissionsWithScore = submissions.map(sub => {
-      const correctAnswers = {};
-      (quiz.questions || []).forEach(q => { correctAnswers[q.id] = q.answer; });
-
-      const answersWithScore = (sub.answers || []).map(a => ({
-        questionId: a.questionId,
-        selectedOption: a.selectedOption,
-        score: correctAnswers[a.questionId] === a.selectedOption ? 1 : 0,
-      }));
-
-      const totalScore = answersWithScore.reduce((sum, a) => sum + a.score, 0);
-
-      return { id: sub.id, student: sub.Student, submittedAt: sub.createdAt, answers: answersWithScore, totalScore };
-    });
-
-    res.json({ success: true, data: submissionsWithScore });
+    console.log(`[GET_QUIZ_SUBMISSIONS] Found ${submissionsWithStudent.length} submissions for quiz ${quizId}`);
+    res.json({ success: true, data: submissionsWithStudent });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
 

@@ -6,7 +6,25 @@ import bcrypt from "bcryptjs";
 class Student extends Model {
   // Method to compare password
   async matchPassword(enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
+    console.log("=== PASSWORD COMPARISON ===");
+    console.log("Entered password:", enteredPassword);
+    console.log("Stored hashed password exists:", !!this.password);
+    console.log("Stored hashed password (first 20 chars):", this.password?.substring(0, 20));
+    console.log("Stored plainPassword:", this.plainPassword);
+    
+    if (!this.password) {
+      console.log("❌ ERROR: Password field is null/empty!");
+      return false;
+    }
+    
+    try {
+      const result = await bcrypt.compare(enteredPassword, this.password);
+      console.log("bcrypt.compare result:", result);
+      return result;
+    } catch (error) {
+      console.log("❌ bcrypt.compare error:", error.message);
+      return false;
+    }
   }
 }
 
@@ -37,6 +55,11 @@ Student.init(
     password: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+    plainPassword: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: "Plain text password for admin view only (not for authentication)"
     },
     phone: {
       type: DataTypes.STRING,
@@ -77,7 +100,9 @@ Student.init(
 
     hooks: {
       beforeCreate: async (student) => {
-        if (student.password) {
+        // ✅ IMPORTANT: Only hash if password is not already hashed
+        // Check if password looks like a hash (bcrypt hashes start with $2a$ or $2b$ or $2y$)
+        if (student.password && !student.password.startsWith("$2")) {
           const salt = await bcrypt.genSalt(10);
           student.password = await bcrypt.hash(student.password, salt);
         }

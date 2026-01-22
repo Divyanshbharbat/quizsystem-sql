@@ -54,8 +54,6 @@ const App = () => {
           <Route path="/seeresult" element={<Seeresult />} />
           <Route path="/result/:id" element={<HomePageStudent />} />
           <Route path="/thankyou" element={<ThankYou />} />
-          <Route path="*" element={<Error />} />
-     
 
           <Route path="/createquiz" element={<UploadQuestions />} />
           <Route path="/myquiz" element={<DashboardLayout><CreateMyQuizzes /></DashboardLayout>} />
@@ -64,11 +62,12 @@ const App = () => {
           <Route path="/faculty-management" element={<FacultyManagement />} />
           <Route path="/seeresult/:quizId" element={<StStudentQuizResult />} />
 
-             <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/admin-dashboard" element={<DashboardLayout><AdminDashboard /></DashboardLayout>} />
           <Route path="/quiz-results/:quizId" element={<QuizResults />} />
 
+          <Route path="*" element={<Error />} />
         </Routes>
       </Router>
     </AuthProvider>

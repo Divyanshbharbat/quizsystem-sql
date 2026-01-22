@@ -47,15 +47,19 @@ const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled 
   return (
     <div className="bg-white p-4 md:p-6 rounded-xl shadow-lg mb-6 select-none transition duration-300 hover:shadow-2xl">
       <div className="text-sm text-gray-500 mb-2">Subcategory: {question.subcategory || "N/A"}</div>
-      <h2 className="text-lg md:text-2xl font-semibold mb-3 md:mb-4 leading-tight">
-        {question.question || "No question text"}
-        {question.description && (
-          <span className="block text-sm text-gray-500 mt-1">{question.description}</span>
-        )}
-      </h2>
+      
+      {/* ✅ HIDE QUESTION TEXT FOR IMAGE-BASED QUESTIONS */}
+      {!question.image && (
+        <h2 className="text-lg md:text-2xl font-semibold mb-3 md:mb-4 leading-tight">
+          {question.question || "No question text"}
+          {question.description && (
+            <span className="block text-sm text-gray-500 mt-1">{question.description}</span>
+          )}
+        </h2>
+      )}
 
       {question.image ? (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           {/* IMAGE SECTION - OPTIMIZED HEIGHT */}
           <div className="w-full flex justify-center items-center">
             <div className="w-full rounded-lg overflow-hidden border-4 border-blue-300 relative bg-gradient-to-br from-gray-50 to-gray-100" style={{ maxHeight: "45vh", maxWidth: "100%" }}>
@@ -91,6 +95,11 @@ const QuestionComponent = ({ question, selectedOption, onOptionSelect, disabled 
               />
             </div>
           </div>
+
+          {/* ✅ SHOW DESCRIPTION ONLY FOR IMAGE QUESTIONS */}
+          {question.description && (
+            <p className="text-base font-semibold text-gray-700 text-center mb-2">{question.description}</p>
+          )}
 
           {/* OPTIONS SECTION - VISIBLE WITHOUT SCROLLING */}
           <div className="w-full">

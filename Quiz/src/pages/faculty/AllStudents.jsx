@@ -5,6 +5,7 @@ import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 import toast, { Toaster } from "react-hot-toast";
 import { FaArrowLeft } from "react-icons/fa";
+import { FiEye, FiEyeOff } from "react-icons/fi";
 import Papa from "papaparse";
 
 const AllStudents = () => {
@@ -23,6 +24,9 @@ const AllStudents = () => {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
 
   // Edit form state
   const [editFormData, setEditFormData] = useState({
@@ -133,7 +137,10 @@ const AllStudents = () => {
       if (res.data.success) {
         toast.success("✅ Student added successfully");
         setNewStudent({ studentId: "", name: "", email: "", phone: "", department: "", year: "" });
-        fetchAllStudents();
+        
+        // Add small delay and then refresh to ensure database is updated
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await fetchAllStudents();
       }
     } catch (err) {
       console.error(err);
@@ -143,15 +150,68 @@ const AllStudents = () => {
   };
 
   // Edit student
-  const handleEditClick = (student) => {
-    setEditingStudent(student);
-    setEditFormData({
-      name: student.name,
-      email: student.email,
-      phone: student.phone || "",
-      password: "",
-    });
-    setShowEditModal(true);
+  const handleEditClick = async (student) => {
+    try {
+      console.log("[AllStudents] Editing student ID:", student.id);
+      // Fetch full student details with password for admin view
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/student/admin/password/${student.id}`);
+      console.log("[AllStudents] Password API response:", res.data);
+      const fullStudent = res.data.data || student;
+      console.log("[AllStudents] Full student data:", fullStudent);
+      console.log("[AllStudents] Password value:", fullStudent.password);
+      setEditingStudent(fullStudent);
+      setCurrentPassword(fullStudent.password || "");
+      setEditFormData({
+        name: fullStudent.name,
+        email: fullStudent.email,
+        phone: fullStudent.phone || "",
+        password: "",
+      });
+      setShowEditModal(true);
+      setShowPassword(false);
+      toast.success("Student details loaded");
+    } catch (err) {
+      console.error("[AllStudents] Password API error:", err);
+      console.error("[AllStudents] Error response:", err.response?.data);
+      toast.error(`Error loading password: ${err.response?.data?.message || err.message}`);
+      // Fallback to basic student data
+      setEditingStudent(student);
+      setCurrentPassword(student.password || "");
+      setEditFormData({
+        name: student.name,
+        email: student.email,
+        phone: student.phone || "",
+        password: "",
+      });
+      setShowEditModal(true);
+      setShowPassword(false);
+    }
+  };
+
+  const handleDeleteStudent = async (studentId) => {
+    if (!window.confirm("Are you sure you want to delete this student? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      console.log("[AllStudents] Deleting student:", studentId);
+      const res = await axios.delete(
+        `${import.meta.env.VITE_APP}/api/student/delete/${studentId}`
+      );
+      console.log("[AllStudents] Delete response:", res.data);
+      if (res.data.success) {
+        toast.success("Student deleted successfully");
+        await fetchAllStudents();
+        setSelectedStudent(null);  // Clear selected student view
+      } else {
+        toast.error(res.data.message || "Failed to delete student");
+      }
+    } catch (err) {
+      console.error("[AllStudents] Delete error:", err);
+      console.error("[AllStudents] Error response:", err.response?.data);
+      const msg = err.response?.data?.message || "Error deleting student";
+      toast.error(msg);
+    }
   };
 
   const handleUpdateStudent = async () => {
@@ -208,7 +268,10 @@ const AllStudents = () => {
           toast.success(`✅ ${res.data.message || "CSV uploaded successfully"}`);
           setCSVFile(null);
           fileInputRef.current.value = "";
-          fetchAllStudents();
+          
+          // Add small delay and then refresh to ensure database is updated
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await fetchAllStudents();
         }
       } catch (err) {
         console.error(err);
@@ -225,13 +288,13 @@ const AllStudents = () => {
       <Sidebar />
       <Toaster />
 
-      <div className="flex flex-col flex-1">
+      <div className="flex flex-col flex-1 h-screen overflow-hidden">
         <Navbar
           userName={facultyDetails?.name || "Student Details"}
           onProfileClick={() => navigate(-1)}
         />
 
-        <main className="flex-1 p-6">
+        <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
           <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-3xl font-bold text-gray-800">All Students</h2>
@@ -490,6 +553,13 @@ const AllStudents = () => {
                                   >
                                     Edit
                                   </button>
+                                  <button
+                                    onClick={() => handleDeleteStudent(student.id)}
+                                    className="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors"
+                                    title="Delete Student"
+                                  >
+                                    Delete
+                                  </button>
                                 </div>
                               </td>
                             </tr>
@@ -613,7 +683,7 @@ const AllStudents = () => {
             {/* Edit Student Modal */}
             {showEditModal && editingStudent && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
               <h3 className="text-2xl font-bold text-gray-800 mb-6">Edit Student Details</h3>
               
               <div className="space-y-4">
@@ -648,14 +718,44 @@ const AllStudents = () => {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={currentPassword}
+                      readOnly
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 text-gray-600 hover:text-gray-800 transition-colors"
+                      title={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">New Password (optional)</label>
-                  <input
-                    type="password"
-                    value={editFormData.password}
-                    onChange={(e) => setEditFormData({...editFormData, password: e.target.value})}
-                    placeholder="Leave blank to keep current password"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={editFormData.password}
+                      onChange={(e) => setEditFormData({...editFormData, password: e.target.value})}
+                      placeholder="Leave blank to keep current password"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 text-gray-600 hover:text-gray-800 transition-colors"
+                      title={showNewPassword ? "Hide password" : "Show password"}
+                    >
+                      {showNewPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                    </button>
+                  </div>
                 </div>
               </div>
 

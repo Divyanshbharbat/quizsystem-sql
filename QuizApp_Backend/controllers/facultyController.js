@@ -19,15 +19,17 @@ export const getFacultyQuizzes = async (req, res) => {
       return res.status(400).json({ success: false, message: "Faculty ID required" });
     }
 
-    const quizzes = await Quiz.findAll({
-      where: { createdBy: facultyId },
+    // Query QuizConfig instead of Quiz since QuizConfig has the createdBy field
+    const quizzes = await QuizConfig.findAll({
+      where: { createdBy: parseInt(facultyId) },
       order: [["createdAt", "DESC"]],
+      attributes: ["id", "title", "category", "timeLimit", "subject", "session", "createdAt", "updatedAt"]
     });
 
     res.json({ success: true, data: quizzes });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -79,6 +81,7 @@ export const registerFaculty = async (req, res) => {
       department: department.trim(),
       phone: phone.trim(),
       password: hashedPassword,
+      plainPassword: phone,  // ✅ Store plain text for admin view
       isAdmin: isAdmin || false,
       subjects: Array.isArray(subjects) ? subjects : [],
       session: session.trim(),
@@ -139,7 +142,7 @@ export const loginFaculty = async (req, res) => {
 
     const { password: pwd, ...userData } = user.toJSON();
 
-    res.json({ success: true, message: "Login successful", data: userData });
+    res.json({ success: true, message: "Login successful", data: userData, token: token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
@@ -235,9 +238,21 @@ export const updateFaculty = async (req, res) => {
 export const deleteFaculty = async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await Faculty.destroy({ where: { id } });
 
-    if (!deleted) return res.status(404).json({ success: false, message: "Faculty not found" });
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Faculty ID is required" });
+    }
+
+    const faculty = await Faculty.findByPk(id);
+    if (!faculty) {
+      return res.status(404).json({ success: false, message: "Faculty not found" });
+    }
+
+    // Delete all quiz configs created by this faculty (this cascades to related data)
+    await QuizConfig.destroy({ where: { createdBy: id } });
+
+    // Delete the faculty
+    const deleted = await Faculty.destroy({ where: { id } });
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
@@ -248,10 +263,10 @@ export const deleteFaculty = async (req, res) => {
       global._workers = {};
     }
 
-    res.status(200).json({ success: true, message: "Faculty deleted successfully" });
+    res.json({ success: true, message: "Faculty deleted successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server Error" });
+    res.status(500).json({ success: false, message: "Server error", error: err.message });
   }
 };
 
@@ -346,7 +361,12 @@ export const getFacultyWithPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Faculty not found" });
     }
 
-    res.json({ success: true, data: faculty });
+    // ✅ Return data with plain password for admin view
+    const data = faculty.toJSON();
+    // ✅ Map plainPassword to password field for consistent frontend handling
+    data.password = data.plainPassword || data.phone || ""; // Fallback to phone if plainPassword is null
+    console.log(`[GET_FACULTY_PASSWORD] Returning faculty ${faculty.id} with password: ${data.password}`);
+    res.json({ success: true, data });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });
@@ -367,9 +387,14 @@ export const updateFacultyPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Faculty not found" });
     }
 
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await faculty.update({ password: hashedPassword });
+    // ✅ Hash password for secure storage
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
+    
+    // ✅ Store both hashed (for login) and plain text (for admin view)
+    await faculty.update({ 
+      password: hashedPassword,
+      plainPassword: password.trim()
+    });
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
@@ -380,8 +405,9 @@ export const updateFacultyPassword = async (req, res) => {
       global._workers = {};
     }
 
+    // Return data with plain password for admin
     const data = faculty.toJSON();
-    delete data.password;
+    data.password = data.plainPassword; // Show plain text to admin
     res.json({ success: true, message: "Faculty password updated successfully", data });
   } catch (err) {
     console.error(err);

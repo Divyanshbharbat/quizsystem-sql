@@ -1,6 +1,5 @@
 import { request } from "express";
 import Quiz from "../models/Quiz.js";
-import QuizSubmission from "../models/QuizSubmission.js";
 import Student from "../models/Student.js";
 import nodemailer from "nodemailer";
 import QuizProgress from "../models/QuizProgress.js";
@@ -144,12 +143,23 @@ console.log(`[SUBMIT] Received submission for quiz ${quizId} from student ${stud
     console.log(`[SUBMIT] Total Score: ${totalScore}/${Object.keys(questionMap).length}`);
     console.log(`[SUBMIT] Subcategory Scores:`, formattedScores);
 
+    // ✅ Fetch student details for submission record
+    const student = await Student.findByPk(studentId);
+    
     // 4️⃣ Save submission to QuizConfig.completed (JSON)
     const newSubmission = {
-      studentId,
-      student: studentId,
+      studentId: {
+        id: studentId,
+        name: student?.name || "-",
+        studentId: student?.studentId || "-",
+        department: student?.department || "-",
+        year: student?.year || "-"
+      },
       score: totalScore,
+      totalMarks: Object.keys(questionMap).length,
+      percentage: Object.keys(questionMap).length > 0 ? (totalScore / Object.keys(questionMap).length) * 100 : 0,
       subcategoryScores: formattedScores,
+      answers: answers,  // ✅ Include answers for results viewing
       submittedAt: new Date()
     };
 
@@ -208,46 +218,29 @@ export const getCategoryDistribution = async (req, res) => {
   const { quizId, studentId } = req.params;
 
   try {
-    const quiz = await Quiz.findById(quizId);
-    if (!quiz) return res.status(404).json({ success: false, message: 'Quiz not found' });
+    const quizConfig = await QuizConfig.findByPk(quizId);
+    if (!quizConfig) return res.status(404).json({ success: false, message: 'Quiz not found' });
 
-    const submission = await QuizSubmission.findOne({ quizId, studentId });
+    const completed = quizConfig.completed || [];
+    const submission = completed.find(sub => sub.studentId === parseInt(studentId));
     if (!submission) return res.status(404).json({ success: false, message: 'Submission not found' });
 
-    const questionCategoryMap = {};
-    const questionOptionsMap = {};
-
-    quiz.categories.forEach(cat => {
-      cat.questions.forEach(q => {
-        questionCategoryMap[q._id.toString()] = cat.category;
-        questionOptionsMap[q._id.toString()] = q.options || [];
-      });
-    });
-
+    // Build category distribution from subcategory scores
     const categoryDistribution = {};
+    
+    if (submission.subcategoryScores && Array.isArray(submission.subcategoryScores)) {
+      submission.subcategoryScores.forEach(subcat => {
+        categoryDistribution[subcat.subcategory] = {
+          score: subcat.score,
+          totalQuestions: subcat.totalQuestions,
+          percentage: subcat.percentage
+        };
+      });
+    }
 
-    submission.answers.forEach(answer => {
-      const questionId = answer.questionId.toString();
-      const category = questionCategoryMap[questionId] || 'Uncategorized';
-      const selectedOption = answer.selectedOption;
-
-      if (!categoryDistribution[category]) {
-        // initialize dynamic options
-        categoryDistribution[category] = {};
-        questionOptionsMap[questionId].forEach(opt => {
-          categoryDistribution[category][opt] = 0;
-        });
-      }
-
-      if (categoryDistribution[category][selectedOption] !== undefined) {
-        categoryDistribution[category][selectedOption] += 1;
-      }
-    });
-
-    return res.json({ success: true, data: categoryDistribution });
-
+    res.json({ success: true, data: categoryDistribution });
   } catch (err) {
-    console.error('Error getting category distribution:', err);
-    return res.status(500).json({ success: false, message: 'Server error' });
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
   }
 };

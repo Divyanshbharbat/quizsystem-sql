@@ -878,7 +878,7 @@ const AdminDashboard = () => {
     ) : null;
   return (
     <div className="flex min-h-screen bg-[#f5f6fa] font-sans">
-      <div className="flex-grow transition-all duration-300">
+      <div className="flex-grow transition-all duration-300 flex flex-col">
         <Navbar userName={adminName || "Admin Dashboard"} onProfileClick={toggleSidebar} />
         <Toaster />
 
@@ -888,8 +888,8 @@ const AdminDashboard = () => {
         {FacultyPasswordModal()}
         {PromoteStudentsModal()}
 
-        <main className="p-8 max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold mb-6 text-gray-800">⚙️ Admin Dashboard</h1>
+        <main className="flex-1 p-4 max-w-7xl mx-auto w-full">
+          <h1 className="text-2xl font-bold mb-4 text-gray-800">⚙️ Admin Dashboard</h1>
 
           {/* TABS */}
           <div className="flex gap-4 mb-6 border-b border-gray-300">

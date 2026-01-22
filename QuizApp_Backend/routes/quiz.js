@@ -3,6 +3,8 @@ const router = express.Router();
 
 import upload from "../middlewares/upload.js";
 import { isAuthenticated } from "../middlewares/authMiddleware2.js";
+import { isFacultyAuthenticated } from "../middlewares/facultyAuth.js";
+import dualAuth from "../middlewares/dualAuth.js";
 import checkStudentBlock from "../middlewares/checkStudentBlock.js";
 import checkStudentBlocked from "../middlewares/checkBlocked.js";
 
@@ -24,6 +26,7 @@ import {
   getAllCategoriesAndSubcategories,
   addImageQuestion,
   diagnoseDatabase,
+  getQuizConfigWithSubmissions,
 } from "../controllers/quizController.js";
 import { blockStudent } from "../controllers/quizController.js"
 import { submitQuiz } from "../controllers/quizSubmissionController.js";
@@ -58,7 +61,8 @@ router.post("/:quizId/unblock-student", isAuthenticated, unblockStudent);
 // =================== QUIZ OPERATIONS ===================
 router.post("/:quizId/save-progress", isAuthenticated, saveProgress);
 router.post("/:quizId/submit", isAuthenticated, submitQuiz);
-router.get("/:quizId/submissions", isAuthenticated, getQuizSubmissions);
+router.get("/:quizId/submissions", dualAuth, getQuizSubmissions);  // ✅ Allow both student and faculty
+router.get("/config/:quizId", getQuizConfigWithSubmissions);  // ✅ Get complete quizConfig with submissions
 router.get("/title/:quizId", getQuizTitleById);
 
 

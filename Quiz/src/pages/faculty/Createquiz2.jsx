@@ -2,11 +2,12 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import Navbar from "../../components/Navbar";
 import Sidebar from "../../components/Sidebar";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import toast, { Toaster } from "react-hot-toast";
 
 const CreateQuiz2 = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [facultyDetails, setFacultyDetails] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -76,6 +77,30 @@ const CreateQuiz2 = () => {
     // Initial load only - no auto-refresh
     refreshCategories();
   }, []);
+
+  /* ================= LOAD EDIT QUIZ IF NAVIGATING FROM MYQUIZZES ================= */
+  useEffect(() => {
+    if (location.state?.editQuiz) {
+      const quiz = location.state.editQuiz;
+      console.log("[CREATE_QUIZ2] Loading edit quiz:", quiz);
+      setEditId(quiz.quizConfigId);
+      setTitle(quiz.title);
+      setSelectedCategory(quiz.category);
+      setTimeLimit(quiz.timeLimit || "");
+      
+      // Load subcategories for the selected category
+      const subs = {};
+      quiz.subcategories.forEach((s) => (subs[s.name] = s.selected));
+      setSelectedSubs(subs);
+      
+      setSubcategories(
+        quiz.subcategories.map((s) => ({
+          name: s.name,
+          questionsAvailable: s.available || 0,
+        }))
+      );
+    }
+  }, [location.state]);
 
   /* ================= CATEGORY ================= */
   const handleCategoryChange = (category) => {

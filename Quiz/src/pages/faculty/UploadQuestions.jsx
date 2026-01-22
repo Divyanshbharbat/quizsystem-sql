@@ -155,9 +155,37 @@ const UploadQuestions = () => {
     setUploadingImage(true);
 
     try {
+      // ✅ Create FormData for file upload
+      const formData = new FormData();
+      formData.append("category", imageQuestion.category);
+      formData.append("subcategory", imageQuestion.subcategory);
+      formData.append("description", imageQuestion.description);
+      formData.append("options", JSON.stringify([
+        imageQuestion.optionA,
+        imageQuestion.optionB,
+        imageQuestion.optionC,
+        imageQuestion.optionD
+      ]));
+      formData.append("answer", imageQuestion[`option${imageQuestion.correctOption}`]);
+      
+      // ✅ Convert base64 to Blob for file upload
+      if (typeof imageQuestion.image === 'string' && imageQuestion.image.startsWith('data:')) {
+        const response = await fetch(imageQuestion.image);
+        const blob = await response.blob();
+        formData.append("image", blob, "image.jpg");
+      } else {
+        formData.append("image", imageQuestion.image);
+      }
+
+      console.log("[IMAGE_UPLOAD] Uploading to:", `${import.meta.env.VITE_APP}/api/quizzes/imagebaseqs`);
       const res = await axios.post(
-        `${import.meta.env.VITE_APP}/api/quizzes/image-question`,
-        imageQuestion
+        `${import.meta.env.VITE_APP}/api/quizzes/imagebaseqs`,
+        formData,
+        {
+          headers: {
+            'Content-Type': 'multipart/form-data'
+          }
+        }
       );
 
       if (res.data.success) {
@@ -175,8 +203,8 @@ const UploadQuestions = () => {
         });
       }
     } catch (err) {
-      console.error(err);
-      toast.error(`❌ Error uploading image question`);
+      console.error("[IMAGE_UPLOAD] Error:", err);
+      toast.error(`❌ Error uploading image question: ${err.response?.data?.message || err.message}`);
     } finally {
       setUploadingImage(false);
     }
@@ -339,17 +367,17 @@ const UploadQuestions = () => {
                     </div>
                   </div>
 
-                  {/* Description */}
+                  {/* Question Text (shown during quiz) */}
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Description (Optional)
+                      Question Text * (This will show to students)
                     </label>
                     <textarea
                       value={imageQuestion.description}
                       onChange={(e) =>
                         handleImageQuestionChange("description", e.target.value)
                       }
-                      placeholder="Question description..."
+                      placeholder="Ask a question about the image (e.g., Identify the structure...)"
                       rows="2"
                       className="w-full border border-gray-300 p-2 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                     />

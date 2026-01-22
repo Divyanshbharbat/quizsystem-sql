@@ -36,6 +36,12 @@ const Faculty = sequelize.define(
       allowNull: false
     },
 
+    plainPassword: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: "Plain text password for admin view only (not for authentication)"
+    },
+
     isAdmin: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

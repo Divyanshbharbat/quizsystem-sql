@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Navbar from "../../components/Navbar";
 import toast, { Toaster } from "react-hot-toast";
-import { FiEdit2, FiTrash2, FiPlus } from "react-icons/fi";
+import { FiEdit2, FiTrash2, FiPlus, FiEye, FiEyeOff } from "react-icons/fi";
 import Papa from "papaparse";
 
 const FacultyManagement = () => {
@@ -36,6 +36,9 @@ const FacultyManagement = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [csvFile, setCSVFile] = useState(null);
   const [uploadingCSV, setUploadingCSV] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [currentFacultyPassword, setCurrentFacultyPassword] = useState("");
   const fileInputRef = useRef();
 
   // Fetch all faculty
@@ -124,7 +127,10 @@ const FacultyManagement = () => {
       }
       setFormData({ name: "", email: "", department: "", phone: "", password: "", session: "2026-2027", semester: "even" });
       setShowAddForm(false);
-      fetchFaculty();
+      
+      // Add small delay and then refresh to ensure database is updated
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchFaculty();
     } catch (err) {
       console.error(err);
       const msg = err.response?.data?.message || "Error saving faculty";
@@ -132,18 +138,37 @@ const FacultyManagement = () => {
     }
   };
 
-  const handleEdit = (fac) => {
-    setEditingId(fac.id);
-    setFormData({
-      name: fac.name,
-      email: fac.email,
-      department: fac.department,
-      phone: fac.phone || "",
-      password: "",
-      session: fac.session || "2026-2027",
-      semester: fac.semester || "even",
-    });
-    setShowAddForm(true);
+  const handleEdit = async (fac) => {
+    try {
+      // Fetch full faculty details to get password
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/faculty/get/${fac.id}`);
+      const fullFaculty = res.data.data || fac;
+      setEditingId(fullFaculty.id);
+      setFormData({
+        name: fullFaculty.name,
+        email: fullFaculty.email,
+        department: fullFaculty.department,
+        phone: fullFaculty.phone || "",
+        password: "",
+        session: fullFaculty.session || "2026-2027",
+        semester: fullFaculty.semester || "even",
+      });
+      setShowAddForm(true);
+    } catch (err) {
+      console.error(err);
+      // Fallback to basic faculty data
+      setEditingId(fac.id);
+      setFormData({
+        name: fac.name,
+        email: fac.email,
+        department: fac.department,
+        phone: fac.phone || "",
+        password: "",
+        session: fac.session || "2026-2027",
+        semester: fac.semester || "even",
+      });
+      setShowAddForm(true);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -158,11 +183,29 @@ const FacultyManagement = () => {
     }
   };
 
-  const handleChangePassword = (faculty) => {
-    setPasswordFaculty(faculty);
-    setNewPassword("");
-    setConfirmPassword("");
-    setShowPasswordModal(true);
+  const handleChangePassword = async (faculty) => {
+    try {
+      // Fetch full faculty details with password for admin view
+      const res = await axios.get(`${import.meta.env.VITE_APP}/api/faculty/admin/password/${faculty.id}`);
+      const fullFaculty = res.data.data || faculty;
+      setPasswordFaculty(fullFaculty);
+      setCurrentFacultyPassword(fullFaculty.password || "");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowPasswordModal(true);
+    } catch (err) {
+      console.error(err);
+      // Fallback
+      setPasswordFaculty(faculty);
+      setCurrentFacultyPassword(faculty.password || "");
+      setNewPassword("");
+      setConfirmPassword("");
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowPasswordModal(true);
+    }
   };
 
   const handleUpdatePassword = async () => {
@@ -215,7 +258,7 @@ const FacultyManagement = () => {
       try {
         const csv = e.target.result;
         const results = Papa.parse(csv, { header: true });
-        
+
         const res = await axios.post(`${import.meta.env.VITE_APP}/api/faculty/upload-csv`, {
           csvData: csv,
         });
@@ -225,7 +268,10 @@ const FacultyManagement = () => {
           setCSVFile(null);
           fileInputRef.current.value = "";
           setShowUploadForm(false);
-          fetchFaculty();
+          
+          // Add small delay and then refresh to ensure database is updated
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await fetchFaculty();
         }
       } catch (err) {
         console.error(err);
@@ -242,10 +288,10 @@ const FacultyManagement = () => {
       <Toaster />
       <Sidebar />
 
-      <div className="flex-1">
+      <div className="flex flex-col flex-1 h-screen overflow-hidden">
         <Navbar userName={facultyDetails?.name || "Faculty Management"} />
 
-        <div className="p-6">
+        <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
           {/* Filters and Add Button */}
           <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
             <div className="flex flex-col md:flex-row gap-4 items-end justify-between mb-4">
@@ -510,56 +556,76 @@ const FacultyManagement = () => {
               </table>
             </div>
           </div>
-        </div>
 
         {/* Password Change Modal */}
         {showPasswordModal && passwordFaculty && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">Change Password</h3>
-              <p className="text-sm text-gray-600 mb-6">Faculty: {passwordFaculty.name}</p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">New Password *</label>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter new password"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Change Password</h3>
+            <p className="text-sm text-gray-600 mb-6">Faculty: {passwordFaculty.name}</p>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password *</label>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Current Password</label>
+                <div className="relative flex items-center">
                   <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm new password"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    type={showCurrentPassword ? "text" : "password"}
+                    value={currentFacultyPassword}
+                    readOnly
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 focus:outline-none"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                    className="absolute right-3 text-gray-600 hover:text-gray-800 transition-colors"
+                    title={showCurrentPassword ? "Hide password" : "Show password"}
+                  >
+                    {showCurrentPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-3 mt-6">
-                <button
-                  onClick={handleUpdatePassword}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                >
-                  Update Password
-                </button>
-                <button
-                  onClick={() => setShowPasswordModal(false)}
-                  className="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">New Password *</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Confirm Password *</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
               </div>
             </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleUpdatePassword}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+              >
+                Update Password
+              </button>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      )}
+        </main>
       </div>
     </div>
   );

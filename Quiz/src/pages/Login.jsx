@@ -54,7 +54,13 @@ const Login = () => {
 
       if (response.ok && result.success) {
         const facultyDetails = result.data;
+        const token = result.token;
+        
         localStorage.setItem("facultyDetails", JSON.stringify(facultyDetails));
+        if (token) {
+          localStorage.setItem("token", token);
+          console.log("[LOGIN] ✅ Token saved to localStorage");
+        }
         
         // Show success message
         toast.success("Login successful");

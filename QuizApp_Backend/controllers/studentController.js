@@ -1,7 +1,7 @@
 import Student from "../models/Student.js";
 import Faculty from "../models/Faculty.js";
 import QuizConfig from "../models/QuizConfig.js";
-import QuizSubmission from "../models/QuizSubmission.js";
+import QuizProgress from "../models/QuizProgress.js";
 import Quiz from "../models/Quiz.js";
 
 import jwt from "jsonwebtoken";
@@ -68,7 +68,11 @@ export const registerStudent = async (req, res) => {
       }
     }
 
-    // ✅ Send PLAIN password
+// ✅ Hash password for secure storage and keep plain text for admin view
+    // Use studentId as default password if none provided, otherwise use email as default
+    const passwordToHash = studentId; // ✅ DEFAULT PASSWORD = STUDENT ID
+    const hashedPassword = await bcrypt.hash(passwordToHash, 10);
+    
     const student = await Student.create({
       name,
       studentId,
@@ -76,11 +80,13 @@ export const registerStudent = async (req, res) => {
       year,
       email,
       phone,
-      password: studentId, // ✔ plain text
+      password: hashedPassword,  // ✅ Hash for login security (hashed studentId)
+      plainPassword: passwordToHash,  // ✅ Plain text for admin view (studentId) - STUDENTS LOGIN WITH THIS
     });
 
     const studentData = student.toJSON();
     delete studentData.password;
+    delete studentData.plainPassword;
 
     res.status(201).json({
       success: true,
@@ -101,7 +107,13 @@ export const registerStudent = async (req, res) => {
 // ---------------- LOGIN STUDENT ----------------
 export const loginStudent = async (req, res) => {
   const { uid, password, quizId } = req.body;
-console.log("Login attempt:", { uid, quizId });
+  console.log("=== LOGIN ATTEMPT ===");
+  console.log("UID entered:", uid);
+  console.log("UID type:", typeof uid);
+  console.log("UID length:", uid?.length);
+  console.log("UID trimmed:", uid?.trim());
+  console.log("QuizId:", quizId);
+  
   // ------------------ Validate input ------------------
   if (!uid || !password || !quizId) {
     return res.status(400).json({
@@ -111,27 +123,61 @@ console.log("Login attempt:", { uid, quizId });
   }
 
   try {
+    // ✅ DEBUGGING: Fetch ALL students to see what's in database
+    const allStudents = await Student.findAll({
+      attributes: ["id", "studentId", "name", "email", "plainPassword"]
+    });
+    console.log("=== ALL STUDENTS IN DATABASE ===");
+    allStudents.forEach(s => {
+      console.log(`- StudentId: "${s.studentId}" (type: ${typeof s.studentId}, length: ${s.studentId?.length}), Name: ${s.name}`);
+    });
+    
     // ------------------ Find student ------------------
+    console.log("\n=== SEARCHING FOR STUDENT ===");
+    console.log("Looking for studentId:", uid);
     const student = await Student.findOne({ where: { studentId: uid } });
-    console.log("Found student:", student);
+    
     if (!student) {
+      console.log("❌ NO STUDENT FOUND with studentId:", uid);
+      
+      // Try with trimmed version
+      const trimmedUid = uid.trim();
+      console.log("Trying with trimmed UID:", trimmedUid);
+      const studentTrimmed = await Student.findOne({ where: { studentId: trimmedUid } });
+      
+      if (studentTrimmed) {
+        console.log("⚠️ FOUND AFTER TRIM! Issue: UID has leading/trailing whitespace");
+        return res.status(401).json({ 
+          success: false, 
+          message: "Invalid UID (has whitespace). Try: '" + trimmedUid + "'",
+          errorField: "uid",
+        });
+      }
+      
       return res.status(401).json({ 
         success: false, 
-        message: "Invalid UID or password",
-        errorField: "uid", // ✅ Specific field
+        message: "Invalid UID. Student not found in database. Available IDs: " + allStudents.map(s => s.studentId).join(", "),
+        errorField: "uid",
       });
     }
+    
+    console.log("✅ STUDENT FOUND:", student.studentId);
+    console.log("Password entered by user:", password);
+    console.log("Hashed password in DB starts with:", student.password.substring(0, 15));
 
     // ------------------ Check password ------------------
     const isMatch = await student.matchPassword(password);
-    console.log("Password match:", isMatch);
+    console.log("Password match result:", isMatch);
+    
     if (!isMatch) {
+      console.log("❌ Password mismatch! Expected password to be: " + student.plainPassword);
       return res.status(401).json({ 
         success: false, 
-        message: "Invalid UID or password",
+        message: "Invalid UID or password. Default password is your Student ID (" + student.studentId + ")",
         errorField: "password", // ✅ Specific field
       });
     }
+    console.log("✅ Password matched successfully for student:", student.studentId);
 
     // ------------------ Fetch quiz with Faculty ------------------
     const quiz = await QuizConfig.findByPk(quizId, {
@@ -431,6 +477,7 @@ export const uploadStudentsCSV = async (req, res) => {
         year: Number(stu.year),
         email: stu.email.trim(),
         password: await bcrypt.hash(stu.password, 10),
+        plainPassword: stu.studentId.trim(),  // ✅ Set plainPassword for admin view
         phone: stu.phone ? stu.phone.trim() : "0000000000",
       }))
     );
@@ -503,9 +550,10 @@ export const updateStudent = async (req, res) => {
       phone: phone || student.phone,
     };
 
-    // ✅ Hash password if provided
+    // ✅ Hash password for secure storage, but also keep plain text for admin view
     if (password) {
-      updateData.password = await bcrypt.hash(password, 10);
+      updateData.password = await bcrypt.hash(password.trim(), 10);
+      updateData.plainPassword = password.trim();
     }
 
     await student.update(updateData);
@@ -531,8 +579,32 @@ export const updateStudent = async (req, res) => {
 // ---------------- DELETE STUDENT ----------------
 export const deleteStudent = async (req, res) => {
   try {
-    const deleted = await Student.destroy({ where: { id: req.params.id } });
-    if (!deleted) return res.status(404).json({ success: false, message: "Student not found" });
+    // Support both :id and :studentId parameter names
+    const id = req.params.id || req.params.studentId;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Student ID is required" });
+    }
+
+    const student = await Student.findByPk(id);
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    // Remove student from completed arrays in all quizzes
+    const quizzes = await QuizConfig.findAll();
+    for (const quiz of quizzes) {
+      if (quiz.completed && Array.isArray(quiz.completed)) {
+        quiz.completed = quiz.completed.filter(sub => sub.student !== student.name && sub.studentId !== id);
+        await quiz.save();
+      }
+    }
+
+    // Delete associated quiz progress
+    await QuizProgress.destroy({ where: { studentId: id } });
+
+    // Delete the student
+    const deleted = await Student.destroy({ where: { id } });
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
@@ -564,15 +636,17 @@ export const updateStudentPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Student not found" });
     }
 
-    // ✅ Hash the new password - controller handles hashing, not the model
+    // ✅ Hash password for secure storage
     console.log("[UPDATE_STUDENT_PASSWORD] Hashing password before update...");
-    const hashedPassword = await bcrypt.hash(password, 10);
-    console.log("[UPDATE_STUDENT_PASSWORD] Password hashed, hash starts with:", hashedPassword.substring(0, 10));
+    const hashedPassword = await bcrypt.hash(password.trim(), 10);
     
-    await student.update({ password: hashedPassword });
+    // ✅ Store both hashed (for login) and plain text (for admin view)
+    await student.update({ 
+      password: hashedPassword,
+      plainPassword: password.trim()
+    });
     
     console.log("[UPDATE_STUDENT_PASSWORD] Password updated in database for student:", req.params.studentId);
-    console.log("[UPDATE_STUDENT_PASSWORD] Verifying - password field now starts with:", student.password.substring(0, 10));
 
     // ✅ Clear all workers/background tasks
     if (global.gc) global.gc();
@@ -584,7 +658,7 @@ export const updateStudentPassword = async (req, res) => {
     }
 
     const data = student.toJSON();
-    delete data.password;
+    data.password = data.plainPassword; // Show plain text to admin
     res.json({ success: true, message: "Student password updated successfully", data });
   } catch (err) {
     console.error(err);
@@ -600,7 +674,12 @@ export const getStudentWithPassword = async (req, res) => {
       return res.status(404).json({ success: false, message: "Student not found" });
     }
 
-    res.json({ success: true, data: student });
+    // ✅ Return data with plain password for admin view
+    const data = student.toJSON();
+    // ✅ Map plainPassword to password field for consistent frontend handling
+    data.password = data.plainPassword || data.studentId || ""; // Fallback to studentId if plainPassword is null
+    console.log(`[GET_STUDENT_PASSWORD] Returning student ${student.id} with password: ${data.password}`);
+    res.json({ success: true, data });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });
@@ -763,32 +842,33 @@ console.log("Student quizzes fetched:", studentResults);
 export const getQuizResult = async (req, res) => {
   try {
     const { submissionId } = req.params;
+    const { studentId, quizId } = req.query;
 
-    const submission = await QuizSubmission.findByPk(submissionId, {
-      include: [{ model: Quiz, attributes: ["title", "categories"] }],
-    });
-    if (!submission) return res.status(404).json({ success: false, message: "Submission not found" });
-
-    const quiz = submission.Quiz;
+    // Fetch the quiz config
+    const quiz = await QuizConfig.findByPk(quizId);
     if (!quiz) return res.status(404).json({ success: false, message: "Quiz not found" });
 
-    let score = 0;
-    const sections = quiz.categories.map((cat) => {
-      let secScore = 0;
-      cat.questions.forEach((q) => {
-        const ans = submission.answers.find((a) => a.questionId === q.id);
-        if (ans) {
-          if (ans.selectedOption === "Maybe") secScore += 0.5;
-          else if (ans.selectedOption === q.correctAnswer) secScore += 1;
-        }
-      });
-      score += secScore;
-      return { name: cat.name, score: secScore, total: cat.questions.length };
+    // Find the submission in the completed array
+    if (!quiz.completed || !Array.isArray(quiz.completed)) {
+      return res.status(404).json({ success: false, message: "No submissions found" });
+    }
+
+    const submission = quiz.completed.find(sub => sub.studentId === parseInt(studentId) || (sub.id && sub.id === submissionId));
+    if (!submission) {
+      return res.status(404).json({ success: false, message: "Submission not found" });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        quiz: { title: quiz.title, id: quiz.id },
+        score: submission.score,
+        totalMarks: submission.totalMarks || 100,
+        percentage: submission.percentage,
+        subcategoryScores: submission.subcategoryScores,
+        submittedAt: submission.submittedAt,
+      },
     });
-
-    const totalQuestions = quiz.categories.flatMap((c) => c.questions).length;
-
-    res.json({ success: true, data: { quiz: { title: quiz.title }, score, totalQuestions, sections, submittedAt: submission.createdAt } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error", error: err.message });
@@ -803,11 +883,37 @@ export const getStudentSubmissions = async (req, res) => {
     const student = await Student.findByPk(id);
     if (!student) return res.status(404).json({ success: false, message: "Student not found" });
 
-    const submissions = await QuizSubmission.findAll({
-      where: { studentId: id },
-      include: [{ model: Quiz, attributes: ["title", "totalMarks", "createdAt"] }],
-      order: [["createdAt", "DESC"]],
+    // ✅ Fetch all quiz configs and get submissions from the completed array
+    const quizzes = await QuizConfig.findAll();
+    const submissions = [];
+
+    quizzes.forEach(quiz => {
+      if (quiz.completed && Array.isArray(quiz.completed)) {
+        // Filter submissions: match by ID (handle both string and number comparisons)
+        const studentSubmissions = quiz.completed.filter(sub => 
+          String(sub.studentId) === String(id) || 
+          String(sub.student) === String(id) ||
+          sub.student === student.name
+        );
+        studentSubmissions.forEach(sub => {
+          submissions.push({
+            id: sub.id || Math.random(),
+            studentId: id,
+            quizId: quiz.id,
+            quiz: {
+              id: quiz.id,
+              title: quiz.title,
+              totalMarks: 100,
+              createdAt: quiz.createdAt,
+            },
+            ...sub,
+          });
+        });
+      }
     });
+
+    // Sort by submission date (most recent first)
+    submissions.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
 
     res.json({ success: true, count: submissions.length, submissions });
   } catch (err) {

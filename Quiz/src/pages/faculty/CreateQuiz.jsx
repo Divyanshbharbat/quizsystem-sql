@@ -97,6 +97,12 @@ const CreateQuiz = () => {
     if (!category || !subcategory)
       return toast.error("Category & Subcategory required");
 
+    if (!image)
+      return toast.error("Image is required");
+
+    if (!optionA || !optionB || !optionC || !optionD)
+      return toast.error("All 4 options are required");
+
     const options = [optionA, optionB, optionC, optionD];
 
     const formData = new FormData();
@@ -122,7 +128,9 @@ const CreateQuiz = () => {
         answer: options["ABCD".indexOf(correctOption)]
       });
       
-      const res = await axios.post("http://localhost:5000/api/quizzes/imagebaseqs", formData);
+      const apiUrl = `${import.meta.env.VITE_APP}/api/quizzes/imagebaseqs`;
+      console.log("[IMAGE_UPLOAD] API URL:", apiUrl);
+      const res = await axios.post(apiUrl, formData);
       console.log("[IMAGE_UPLOAD] ✅ Response received:", res.data);
       
       setUploadingImage(false); // ✅ Hide loader
@@ -318,11 +326,11 @@ const CreateQuiz = () => {
                 </div>
               </div>
 
-              {/* Description */}
+              {/* Question Text (shown during quiz) */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Question Description *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Question Text * (This will show to students)</label>
                 <textarea
-                  placeholder="Describe what students should do with this image (e.g., Identify the structure in the image)"
+                  placeholder="Ask a question about the image (e.g., Identify the structure in the image, What is this organism?, etc.)"
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-green-500 transition resize-none"
                   rows="3"
                   value={imageQuestion.description}

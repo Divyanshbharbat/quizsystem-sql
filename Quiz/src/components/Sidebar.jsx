@@ -39,11 +39,11 @@ const Sidebar = () => {
      ROLE BASED NAV ITEMS
   ========================= */
   const adminNavItems = [
+    { name: "Faculty Details", to: "/faculty-management", icon: <FiUsers /> },
+    { name: "Student Details", to: "/studentdetails", icon: <FiUsers /> },
     { name: "Upload Questions", to: "/createquiz", icon: <FiUpload /> },
     { name: "Create Quiz", to: "/create", icon: <FiPlusCircle /> },
     { name: "My Quizzes", to: "/myquizzes", icon: <FiFileText /> },
-    { name: "Faculty Management", to: "/faculty-management", icon: <FiUsers /> },
-    { name: "Student Management", to: "/studentdetails", icon: <FiUsers /> },
     { name: "Template", to: "/template", icon: <FiFileText /> },
   ];
 
@@ -78,71 +78,101 @@ const Sidebar = () => {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-screen w-72 bg-gradient-to-b from-slate-800 via-slate-700 to-slate-800 text-gray-100 shadow-2xl z-40 flex flex-col justify-between transform transition-transform duration-300 border-r-2 border-blue-500 ${
+        className={`fixed top-0 left-0 h-screen w-80 bg-white shadow-2xl z-40 flex flex-col transform transition-transform duration-300 border-r border-gray-200 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 lg:static`}
       >
-        <div className="p-7 space-y-7">
-          <div className="pb-5 border-b-2 border-blue-400">
-            <h2 className="text-3xl font-bold text-white">
-              {isAdmin ? "Admin" : "Faculty"}
-            </h2>
-            <p className="text-sm text-blue-300 mt-2 font-semibold">Portal</p>
-          </div>
-
-          {/* Faculty Info Card */}
-          <div className="space-y-4 text-sm bg-gradient-to-br from-blue-600 to-indigo-700 p-5 rounded-xl border-2 border-blue-400 shadow-lg">
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-blue-100 min-w-fit text-xl">👤</span>
-              <div>
-                <p className="text-xs text-blue-200 font-semibold">Name</p>
-                <p className="font-semibold text-white break-words text-sm">{facultyDetails?.name || "N/A"}</p>
-              </div>
+        {/* Header Section */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 border-b border-blue-500">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-md">
+              <span className="text-2xl">🎓</span>
             </div>
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-blue-100 min-w-fit text-xl">🏢</span>
-              <div>
-                <p className="text-xs text-blue-200 font-semibold">Department</p>
-                <p className="font-semibold text-white break-words text-sm">{facultyDetails?.department || "N/A"}</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="font-semibold text-blue-100 min-w-fit text-xl">👔</span>
-              <div>
-                <p className="text-xs text-blue-200 font-semibold">Role</p>
-                <p className="font-semibold text-white text-sm">{isAdmin ? "Administrator" : "Faculty"}</p>
-              </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                {isAdmin ? "Admin Panel" : "Faculty Panel"}
+              </h2>
+              <p className="text-xs text-blue-100 font-medium">Quiz Management System</p>
             </div>
           </div>
+        </div>
 
-          {/* Navigation */}
-          <nav className="flex flex-col gap-2 pt-3">
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-3 px-4">Navigation</p>
+        {/* User Info Card */}
+        <div className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 border-b border-gray-200 overflow-y-auto flex-shrink-0">
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                {facultyDetails?.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-800 text-sm break-words">{facultyDetails?.name || "User"}</p>
+                <p className="text-xs text-gray-600 break-words">{facultyDetails?.email || ""}</p>
+              </div>
+            </div>
+            <div className="space-y-2 pt-2 border-t border-blue-200">
+              <div>
+                <p className="text-xs text-gray-600 font-medium">Department</p>
+                <p className="text-sm font-bold text-blue-700 break-words">{facultyDetails?.department || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600 font-medium">Role</p>
+                <p className="text-sm font-bold text-indigo-700">{isAdmin ? "Admin" : "Faculty"}</p>
+              </div>
+              {facultyDetails?.session && (
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Session</p>
+                  <p className="text-sm font-semibold text-gray-800">{facultyDetails.session}</p>
+                </div>
+              )}
+              {facultyDetails?.semester && (
+                <div>
+                  <p className="text-xs text-gray-600 font-medium">Semester</p>
+                  <p className="text-sm font-semibold text-gray-800">{facultyDetails.semester}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation Section */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mb-2">Main Menu</p>
+          </div>
+          <nav className="space-y-2">
             {navItems.map((item) => (
               <button
                 key={item.name}
                 onClick={() => handleNavClick(item.to)}
-                className={`flex items-center gap-4 px-5 py-3 rounded-lg transition-all duration-200 font-semibold text-sm ${
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 text-left group ${
                   isActive(item.to)
-                    ? "bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg scale-105"
-                    : "text-gray-300 hover:bg-slate-600 hover:text-white"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-200"
+                    : "text-gray-700 hover:bg-blue-50 hover:text-blue-700 hover:shadow-md"
                 }`}
               >
-                <span className="text-lg">{item.icon}</span>
-                <span>{item.name}</span>
+                <span className={`text-xl ${isActive(item.to) ? "text-white" : "text-gray-500 group-hover:text-blue-600"}`}>
+                  {item.icon}
+                </span>
+                <span className={`font-semibold text-sm ${isActive(item.to) ? "text-white" : "text-gray-700 group-hover:text-blue-700"}`}>
+                  {item.name}
+                </span>
+                {isActive(item.to) && (
+                  <span className="ml-auto w-2 h-2 bg-white rounded-full"></span>
+                )}
               </button>
             ))}
           </nav>
         </div>
 
-        {/* Footer */}
-        <div className="p-7 space-y-4 border-t-2 border-slate-600 bg-slate-900 bg-opacity-70">
-          <p className="text-xs text-gray-400 text-center font-semibold">
-            Session: {facultyDetails?.session || "2026-2027"}
-          </p>
-          <p className="text-xs text-gray-500 text-center font-semibold">
-            Logged in: {facultyDetails?.name || "Faculty"}
-          </p>
+        {/* Footer - Logout Button */}
+        <div className="p-4 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-3 bg-gradient-to-r from-red-500 to-red-600 text-white py-3.5 px-4 rounded-xl font-semibold text-sm hover:from-red-600 hover:to-red-700 transition-all duration-200 shadow-md hover:shadow-lg"
+          >
+            <FiLogOut className="text-lg" />
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
     </>
