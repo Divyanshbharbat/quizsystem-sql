@@ -152,79 +152,131 @@ const HomePageStudent = () => {
               No quizzes attempted yet.
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {quizzes.map((quiz, index) => {
                 const colors = getProgressColor(quiz.percentage);
                 return (
                   <motion.div
                     key={quiz.quizId}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
+                    transition={{ delay: index * 0.08, duration: 0.5 }}
+                    whileHover={{ y: -8, boxShadow: "0 20px 40px rgba(59, 130, 246, 0.2)" }}
                     onClick={() => openModal(quiz)}
-                    className="cursor-pointer bg-white rounded-xl border-2 border-gray-200 shadow-sm p-6 hover:shadow-lg hover:border-blue-300 transition transform hover:scale-102"
+                    className="cursor-pointer bg-white rounded-2xl border-2 border-gray-200 shadow-md p-6 hover:border-blue-400 transition duration-300 group overflow-hidden relative"
                   >
-                    {/* Quiz Title */}
-                    <h3 className="text-lg font-bold text-gray-800 mb-1 line-clamp-2">
-                      {quiz.quizTitle || quiz.title || "Untitled Quiz"}
-                    </h3>
+                    {/* Gradient Overlay on Hover */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      whileHover={{ opacity: 1 }}
+                      className="absolute inset-0 bg-gradient-to-br from-blue-50 to-transparent pointer-events-none rounded-2xl"
+                    />
 
-                    <p className="text-xs text-gray-500 mb-4">
-                      {new Date(quiz.submittedAt).toLocaleDateString()}
-                    </p>
+                    {/* Content Container */}
+                    <div className="relative z-10">
+                      {/* Top Accent Bar */}
+                      <motion.div
+                        initial={{ width: 0 }}
+                        whileHover={{ width: "100%" }}
+                        className="absolute top-0 left-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
+                        style={{ marginTop: "-24px", marginLeft: "-24px", marginRight: "-24px" }}
+                      />
 
-                    {/* Score Display */}
-                    <div className="mb-4 pb-4 border-b-2 border-gray-100">
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-                        <div>
-                          <div style={{ fontSize: "13px", color: "#999", marginBottom: "4px" }}>Overall Score</div>
-                          <div style={{ fontSize: "20px", fontWeight: "bold", color: "#333" }}>
-                            {quiz.score}/{quiz.totalQuestions}
+                      {/* Quiz Title */}
+                      <h3 className="text-lg font-bold text-gray-800 mb-2 line-clamp-2 group-hover:text-blue-600 transition">
+                        {quiz.quizTitle || quiz.title || "Untitled Quiz"}
+                      </h3>
+
+                      {/* Date with Icon */}
+                      <p className="text-xs text-gray-400 mb-5 font-semibold flex items-center gap-1">
+                        <span>📅</span>
+                        {new Date(quiz.submittedAt).toLocaleDateString()}
+                      </p>
+
+                      {/* Score Display Section */}
+                      <div className="mb-6 pb-6 border-b-2 border-gray-100 group-hover:border-blue-200 transition">
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+                          <div className="flex-1">
+                            <div style={{ fontSize: "12px", color: "#999", marginBottom: "6px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                              Overall Score
+                            </div>
+                            <motion.div
+                              whileHover={{ scale: 1.05 }}
+                              style={{ fontSize: "28px", fontWeight: "900", color: colors.text }}
+                            >
+                              {quiz.score}/{quiz.totalQuestions}
+                            </motion.div>
                           </div>
+                          <motion.div
+                            whileHover={{ scale: 1.1, rotate: 5 }}
+                            style={{
+                              minWidth: "90px",
+                              display: "flex",
+                              justifyContent: "center",
+                              padding: "8px",
+                              backgroundColor: colors.bg,
+                              borderRadius: "12px",
+                              border: `2px solid ${colors.bar}`
+                            }}
+                          >
+                            <HalfCircleGauge percentage={quiz.percentage} />
+                          </motion.div>
                         </div>
+                      </div>
+
+                      {/* Performance Bar */}
+                      <div style={{ marginBottom: "16px" }}>
                         <div style={{
-                          minWidth: "80px",
                           display: "flex",
-                          justifyContent: "center"
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginBottom: "8px"
                         }}>
-                          <HalfCircleGauge percentage={quiz.percentage} />
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#666", textTransform: "uppercase", letterSpacing: "0.5px" }}>Performance</span>
+                          <motion.span
+                            whileHover={{ scale: 1.15 }}
+                            style={{ fontSize: "18px", fontWeight: "900", color: colors.text, minWidth: "50px", textAlign: "right" }}
+                          >
+                            {Math.round(quiz.percentage)}%
+                          </motion.span>
                         </div>
+                        <motion.div
+                          initial={{ backgroundColor: colors.bg }}
+                          whileHover={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
+                          style={{
+                            width: "100%",
+                            height: "12px",
+                            backgroundColor: colors.bg,
+                            borderRadius: "8px",
+                            overflow: "hidden",
+                            border: `1px solid ${colors.bar}40`,
+                            position: "relative"
+                          }}
+                        >
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${quiz.percentage}%` }}
+                            transition={{ delay: index * 0.08 + 0.2, duration: 0.8, ease: "easeOut" }}
+                            style={{
+                              height: "100%",
+                              background: `linear-gradient(90deg, ${colors.bar}, ${colors.bar}cc)`,
+                              borderRadius: "8px",
+                              boxShadow: `0 0 8px ${colors.bar}60`
+                            }}
+                          />
+                        </motion.div>
                       </div>
-                    </div>
 
-                    {/* Progress Bar */}
-                    <div style={{ marginBottom: "12px" }}>
-                      <div style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "6px"
-                      }}>
-                        <span style={{ fontSize: "12px", fontWeight: "600", color: colors.text }}>Performance</span>
-                        <span style={{ fontSize: "14px", fontWeight: "bold", color: colors.text }}>
-                          {Math.round(quiz.percentage)}%
-                        </span>
-                      </div>
-                      <div style={{
-                        width: "100%",
-                        height: "8px",
-                        backgroundColor: colors.bg,
-                        borderRadius: "4px",
-                        overflow: "hidden"
-                      }}>
-                        <div style={{
-                          width: `${quiz.percentage}%`,
-                          height: "100%",
-                          backgroundColor: colors.bar,
-                          transition: "width 0.3s ease"
-                        }} />
-                      </div>
+                      {/* Click hint with Icon */}
+                      <motion.div
+                        animate={{ x: [0, 4, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        style={{ fontSize: "12px", color: "#999", textAlign: "center", marginTop: "12px", fontWeight: "600", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                      >
+                        <span>Click to view details</span>
+                        <span className="group-hover:translate-x-1 transition">→</span>
+                      </motion.div>
                     </div>
-
-                    {/* Click hint */}
-                    <p style={{ fontSize: "11px", color: "#bbb", textAlign: "center", marginTop: "8px" }}>
-                      Click to view details
-                    </p>
                   </motion.div>
                 );
               })}

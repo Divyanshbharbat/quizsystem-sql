@@ -657,8 +657,13 @@ const AllStudents = () => {
                                   navigate(`/quiz-results/${quiz?.id}`, {
                                     state: {
                                       student: selectedStudent,
+                                      submission: sub,
                                       submissionId: sub.id,
                                       quizTitle: quiz?.title || "Untitled Quiz",
+                                      subcategoryScores: sub.subcategoryScores || [],
+                                      score: sub.score || 0,
+                                      totalMarks: sub.totalMarks || 100,
+                                      percentage: sub.percentage || 0,
                                     },
                                   })
                                 }

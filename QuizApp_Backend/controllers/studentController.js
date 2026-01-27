@@ -795,6 +795,8 @@ export const getStudentQuizzes = async (req, res) => {
   try {
     const { studentId } = req.params;
 
+    console.log(`[GET_QUIZZES] Fetching quizzes for student ID: ${studentId}`);
+
     // Get all QuizConfigs and filter by student's completed submissions
     const allQuizConfigs = await QuizConfig.findAll();
 
@@ -802,9 +804,20 @@ export const getStudentQuizzes = async (req, res) => {
 
     allQuizConfigs.forEach((quizConfig) => {
       const completed = quizConfig.completed || [];
-      const studentSubmission = completed.find((c) => String(c.student) === String(studentId));
+      
+      // ✅ FIX: Check both c.studentId.id (database ID) and c.studentId (string ID)
+      const studentSubmission = completed.find((c) => {
+        // Handle nested studentId object structure (id, name, studentId, etc.)
+        if (c.studentId && typeof c.studentId === 'object') {
+          return String(c.studentId.id) === String(studentId);
+        }
+        // Handle simple string/number studentId
+        return String(c.student) === String(studentId) || String(c.studentId) === String(studentId);
+      });
 
       if (studentSubmission) {
+        console.log(`[GET_QUIZZES] Found submission for quiz ${quizConfig.id}`);
+        
         const totalQuestions = studentSubmission.subcategoryScores?.reduce((acc, s) => acc + s.totalQuestions, 0) || 0;
         const totalScore = studentSubmission.score || 0;
         const percentage = totalQuestions > 0 ? Math.round((totalScore / totalQuestions) * 100) : 0;
@@ -820,12 +833,17 @@ export const getStudentQuizzes = async (req, res) => {
           subcategoryScores: studentSubmission.subcategoryScores || [],
           submittedAt: studentSubmission.submittedAt,
         });
+      } else {
+        console.log(`[GET_QUIZZES] No submission found for quiz ${quizConfig.id}`);
       }
     });
 
     // Sort by submission date (newest first)
     studentResults.sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt));
-console.log("Student quizzes fetched:", studentResults);
+    
+    console.log(`[GET_QUIZZES] Total quizzes found for student ${studentId}: ${studentResults.length}`);
+    console.log("Student quizzes fetched:", studentResults);
+
     res.json({
       success: true,
       data: studentResults,
@@ -853,7 +871,14 @@ export const getQuizResult = async (req, res) => {
       return res.status(404).json({ success: false, message: "No submissions found" });
     }
 
-    const submission = quiz.completed.find(sub => sub.studentId === parseInt(studentId) || (sub.id && sub.id === submissionId));
+    // ✅ FIX: Handle nested studentId object structure
+    const submission = quiz.completed.find(sub => {
+      if (sub.studentId && typeof sub.studentId === 'object') {
+        return String(sub.studentId.id) === String(studentId);
+      }
+      return sub.studentId === parseInt(studentId) || (sub.id && sub.id === submissionId);
+    });
+    
     if (!submission) {
       return res.status(404).json({ success: false, message: "Submission not found" });
     }
@@ -889,12 +914,16 @@ export const getStudentSubmissions = async (req, res) => {
 
     quizzes.forEach(quiz => {
       if (quiz.completed && Array.isArray(quiz.completed)) {
-        // Filter submissions: match by ID (handle both string and number comparisons)
-        const studentSubmissions = quiz.completed.filter(sub => 
-          String(sub.studentId) === String(id) || 
-          String(sub.student) === String(id) ||
-          sub.student === student.name
-        );
+        // ✅ FIX: Handle nested studentId object structure
+        const studentSubmissions = quiz.completed.filter(sub => {
+          if (sub.studentId && typeof sub.studentId === 'object') {
+            return String(sub.studentId.id) === String(id);
+          }
+          return String(sub.studentId) === String(id) || 
+                 String(sub.student) === String(id) ||
+                 sub.student === student.name;
+        });
+        
         studentSubmissions.forEach(sub => {
           submissions.push({
             id: sub.id || Math.random(),
